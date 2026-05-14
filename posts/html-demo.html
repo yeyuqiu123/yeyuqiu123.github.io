@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HTML 动画演示</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #0a0a0f;
+      color: #e4e4e7;
+      padding: 2rem;
+      line-height: 1.7;
+    }
+    h1 { font-size: 1.8rem; margin-bottom: 1.5rem; }
+    h2 { font-size: 1.3rem; color: #a29bfe; margin: 2rem 0 1rem; }
+    p { color: #8b8b9e; margin-bottom: 1rem; }
+
+    /* 弹跳球 */
+    .bounce-ball {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6c63ff, #fd79a8);
+      animation: bounce 1.2s ease-in-out infinite;
+      margin: 1.5rem auto;
+    }
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-60px); }
+    }
+
+    /* 计数器 */
+    .counter {
+      text-align: center;
+      margin: 1.5rem 0;
+    }
+    .counter .count {
+      font-size: 2.5rem;
+      font-weight: 700;
+      color: #6c63ff;
+    }
+    .counter button {
+      margin-top: .5rem;
+      padding: .6rem 1.5rem;
+      border: 1px solid #6c63ff;
+      border-radius: 8px;
+      background: transparent;
+      color: #6c63ff;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .counter button:hover {
+      background: #6c63ff;
+      color: #fff;
+    }
+
+    /* 渐变卡片 */
+    .gradient-card {
+      max-width: 320px;
+      margin: 1.5rem auto;
+      padding: 2rem;
+      border-radius: 12px;
+      background: linear-gradient(-45deg, #6c63ff, #a29bfe, #fd79a8, #6c63ff);
+      background-size: 300% 300%;
+      animation: gradientShift 4s ease infinite;
+      text-align: center;
+      color: #fff;
+      font-weight: 600;
+      font-size: 1.1rem;
+    }
+    @keyframes gradientShift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* 旋转方块 */
+    .spin-box {
+      width: 60px; height: 60px;
+      margin: 1.5rem auto;
+      border: 3px solid #6c63ff;
+      border-radius: 8px;
+      animation: spin 2s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <h1>HTML 动画演示</h1>
+  <p>这篇文章展示了在博客中直接运行完整的 HTML 动画和交互效果。</p>
+
+  <h2>CSS 弹跳球</h2>
+  <div class="bounce-ball"></div>
+
+  <h2>JS 交互：点击计数器</h2>
+  <div class="counter">
+    <div class="count" id="clickCount">0</div>
+    <button id="clickBtn">点我 +1</button>
+  </div>
+
+  <h2>渐变流动卡片</h2>
+  <div class="gradient-card">渐变流动卡片</div>
+
+  <h2>旋转方块</h2>
+  <div class="spin-box"></div>
+
+  <script>
+    let clicks = 0;
+    const countEl = document.getElementById("clickCount");
+    document.getElementById("clickBtn").addEventListener("click", () => {
+      clicks++;
+      countEl.textContent = clicks;
+      countEl.style.transform = "scale(1.2)";
+      setTimeout(() => countEl.style.transform = "scale(1)", 150);
+    });
+  </script>
+</body>
+</html>

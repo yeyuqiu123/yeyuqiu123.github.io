@@ -2,6 +2,7 @@
 const POSTS_INDEX = [
   {
     slug: "hello-world",
+    type: "md",
     title: "Hello World — 博客搭建记",
     date: "2026-05-13",
     tags: ["随笔", "博客"],
@@ -9,6 +10,7 @@ const POSTS_INDEX = [
   },
   {
     slug: "css-animation-tips",
+    type: "md",
     title: "CSS 动画实用技巧",
     date: "2026-05-12",
     tags: ["CSS", "前端"],
@@ -16,10 +18,19 @@ const POSTS_INDEX = [
   },
   {
     slug: "github-pages-guide",
+    type: "md",
     title: "GitHub Pages 部署指南",
     date: "2026-05-11",
     tags: ["GitHub", "部署"],
     excerpt: "手把手教你如何将静态网站免费部署到 GitHub Pages，支持自定义域名和 HTTPS。",
+  },
+  {
+    slug: "html-demo",
+    type: "html",
+    title: "HTML 动画演示",
+    date: "2026-05-10",
+    tags: ["HTML", "动画", "演示"],
+    excerpt: "在博客中直接运行 HTML 动画和 JS 交互：弹跳球、点击计数器、渐变流动卡片。",
   },
 ];
 
@@ -91,15 +102,47 @@ const modalBody = document.getElementById("modalBody");
 const modalClose = document.getElementById("modalClose");
 
 async function openPost(slug) {
+  const post = POSTS_INDEX.find((p) => p.slug === slug);
+  const type = post ? post.type || "md" : "md";
+
   modalBody.innerHTML = '<p style="color:var(--fg-muted)">加载中...</p>';
   modalOverlay.classList.add("open");
   document.body.style.overflow = "hidden";
 
+  if (type === "html") {
+    // HTML 文章：用 iframe 完整运行
+    modalBody.innerHTML = "";
+    const iframe = document.createElement("iframe");
+    iframe.src = `posts/${slug}.html`;
+    iframe.style.cssText = "width:100%;border:none;min-height:70vh;border-radius:8px;";
+    iframe.onload = () => {
+      try {
+        const h = iframe.contentDocument.documentElement.scrollHeight;
+        iframe.style.height = h + "px";
+      } catch { /* 跨域时忽略 */ }
+    };
+    modalBody.appendChild(iframe);
+    return;
+  }
+
+  // Markdown 文章
   try {
     const res = await fetch(`posts/${slug}.md`);
     if (!res.ok) throw new Error("文章未找到");
     const md = await res.text();
     modalBody.innerHTML = marked.parse(md);
+
+    // 执行文章中的 <script>（innerHTML 插入的 script 不会自动执行）
+    modalBody.querySelectorAll("script").forEach((old) => {
+      const fresh = document.createElement("script");
+      if (old.src) {
+        fresh.src = old.src;
+      } else {
+        fresh.textContent = old.textContent;
+      }
+      old.replaceWith(fresh);
+    });
+
     // 代码高亮
     modalBody.querySelectorAll("pre code").forEach((block) => {
       hljs.highlightElement(block);
@@ -112,6 +155,8 @@ async function openPost(slug) {
 function closeModal() {
   modalOverlay.classList.remove("open");
   document.body.style.overflow = "";
+  // 清理文章注入的 style/script 残留
+  modalBody.innerHTML = "";
 }
 
 modalClose.addEventListener("click", closeModal);
