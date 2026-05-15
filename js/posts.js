@@ -53,8 +53,22 @@ function renderMath(container) {
 }
 
 /* ===== TikZ 渲染 ===== */
+let tikzjaxOnload = null;
+
+// 在 TikZJax 加载前拦截 window.onload，保存其处理器
+const origOnload = window.onload;
+Object.defineProperty(window, "onload", {
+  get() { return tikzjaxOnload || origOnload; },
+  set(fn) { tikzjaxOnload = fn; },
+  configurable: true
+});
+
 function renderTikz(container) {
-  container.querySelectorAll("pre code.language-tikz").forEach((block) => {
+  const tikzBlocks = container.querySelectorAll("pre code.language-tikz");
+  if (tikzBlocks.length === 0) return;
+
+  // 把 tikz 代码块转为 <script type="text/tikz">
+  tikzBlocks.forEach((block) => {
     const code = block.textContent;
     const pre = block.parentElement;
     const script = document.createElement("script");
@@ -62,9 +76,20 @@ function renderTikz(container) {
     script.textContent = code;
     pre.replaceWith(script);
   });
-  // 通知 TikZJax 处理新插入的 script[type=text/tikz]
-  if (window.TikZJax) {
-    window.TikZJax.process();
+
+  // 首次加载 TikZJax
+  if (!document.querySelector('script[data-tikzjax]')) {
+    const s = document.createElement("script");
+    s.src = "https://tikzjax.com/v1/tikzjax.js";
+    s.setAttribute("data-tikzjax", "");
+    s.onload = () => {
+      // TikZJax 设置了 window.onload，手动调用
+      if (tikzjaxOnload) tikzjaxOnload();
+    };
+    document.head.appendChild(s);
+  } else {
+    // 已加载过，直接调用保存的 onload 处理器
+    if (tikzjaxOnload) tikzjaxOnload();
   }
 }
 
