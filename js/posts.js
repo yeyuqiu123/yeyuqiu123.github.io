@@ -1,3 +1,57 @@
+/* ===== KaTeX LaTeX 渲染 ===== */
+function renderMath(container) {
+  // 先处理 $$...$$ 块级公式，再处理 $...$ 行内公式
+  // 遍历所有文本节点，跳过 <pre> 和 <code> 内的内容
+  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      const parent = node.parentElement;
+      if (parent && (parent.tagName === "CODE" || parent.tagName === "PRE")) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+
+  const textNodes = [];
+  while (walker.nextNode()) textNodes.push(walker.currentNode);
+
+  textNodes.forEach((node) => {
+    const text = node.textContent;
+    if (!text.includes("$")) return;
+
+    const fragment = document.createDocumentFragment();
+    const regex = /\$\$([\s\S]+?)\$\$|\$([^\$\n]+?)\$/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(text)) !== null) {
+      // 普通文本
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+      // 公式
+      const tex = (match[1] || match[2]).trim();
+      const displayMode = !!match[1];
+      const span = document.createElement(displayMode ? "div" : "span");
+      try {
+        katex.render(tex, span, { displayMode, throwOnError: false });
+      } catch {
+        span.textContent = match[0];
+      }
+      fragment.appendChild(span);
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    if (fragment.childNodes.length > 0) {
+      node.parentNode.replaceChild(fragment, node);
+    }
+  });
+}
+
 /* ===== 博客文章索引 ===== */
 const POSTS_INDEX = [
   {
@@ -144,6 +198,9 @@ async function openPost(slug) {
     if (!res.ok) throw new Error("文章未找到");
     const md = await res.text();
     modalBody.innerHTML = marked.parse(md);
+
+    // KaTeX 渲染 LaTeX 公式
+    renderMath(modalBody);
 
     modalBody.querySelectorAll("script").forEach((old) => {
       const fresh = document.createElement("script");
