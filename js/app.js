@@ -84,6 +84,19 @@ window.addEventListener("scroll", () => {
   });
 });
 
+/* ===== 滚动动画 (Intersection Observer) ===== */
+const observer = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) {
+        e.target.classList.add("visible");
+        observer.unobserve(e.target);
+      }
+    });
+  },
+  { threshold: 0.1 }
+);
+
 /* ===== 渲染文章列表 ===== */
 const postsGrid = document.getElementById("postsGrid");
 const categoryTabs = document.getElementById("categoryTabs");
@@ -109,7 +122,6 @@ function renderPosts(cat) {
     card.addEventListener("click", () => openPost(post.slug));
     postsGrid.appendChild(card);
   });
-  // 重新观察滚动动画
   document.querySelectorAll(".post-card").forEach((card) => observer.observe(card));
 }
 
@@ -124,21 +136,6 @@ categoryTabs.addEventListener("click", (e) => {
 });
 
 renderPosts("all");
-
-/* ===== 滚动动画 (Intersection Observer) ===== */
-const observer = new IntersectionObserver(
-  (entries) => {
-    entries.forEach((e) => {
-      if (e.isIntersecting) {
-        e.target.classList.add("visible");
-        observer.unobserve(e.target);
-      }
-    });
-  },
-  { threshold: 0.1 }
-);
-
-document.querySelectorAll(".post-card").forEach((card) => observer.observe(card));
 
 /* ===== 文章模态框 ===== */
 const modalOverlay = document.getElementById("modalOverlay");
