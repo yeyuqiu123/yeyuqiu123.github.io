@@ -56,35 +56,7 @@ const POSTS_INDEX = [
   },
 ];
 
-/* ===== 导航栏 ===== */
-const navToggle = document.getElementById("navToggle");
-const navLinks = document.getElementById("navLinks");
-
-navToggle.addEventListener("click", () => {
-  navLinks.classList.toggle("open");
-});
-
-// 点击链接后关闭移动菜单
-navLinks.querySelectorAll("a").forEach((a) => {
-  a.addEventListener("click", () => navLinks.classList.remove("open"));
-});
-
-// 滚动时导航栏高亮
-const sections = document.querySelectorAll("section[id]");
-window.addEventListener("scroll", () => {
-  const scrollY = window.scrollY + 100;
-  sections.forEach((sec) => {
-    const top = sec.offsetTop;
-    const height = sec.offsetHeight;
-    const id = sec.getAttribute("id");
-    const link = navLinks.querySelector(`a[href="#${id}"]`);
-    if (link) {
-      link.classList.toggle("active", scrollY >= top && scrollY < top + height);
-    }
-  });
-});
-
-/* ===== 滚动动画 (Intersection Observer) ===== */
+/* ===== 滚动动画 ===== */
 const observer = new IntersectionObserver(
   (entries) => {
     entries.forEach((e) => {
@@ -123,13 +95,11 @@ function renderPosts(cat) {
     postsGrid.appendChild(card);
   });
   document.querySelectorAll(".post-card").forEach((card) => observer.observe(card));
-  // 兜底：500ms 后强制显示所有卡片
   setTimeout(() => {
     document.querySelectorAll(".post-card:not(.visible)").forEach((card) => card.classList.add("visible"));
   }, 500);
 }
 
-// 分类切换
 categoryTabs.addEventListener("click", (e) => {
   const btn = e.target.closest(".cat-tab");
   if (!btn) return;
@@ -155,7 +125,6 @@ async function openPost(slug) {
   document.body.style.overflow = "hidden";
 
   if (type === "html") {
-    // HTML 文章：用 iframe 完整运行
     modalBody.innerHTML = "";
     const iframe = document.createElement("iframe");
     iframe.src = `posts/${slug}.html`;
@@ -170,14 +139,12 @@ async function openPost(slug) {
     return;
   }
 
-  // Markdown 文章
   try {
     const res = await fetch(`posts/${slug}.md`);
     if (!res.ok) throw new Error("文章未找到");
     const md = await res.text();
     modalBody.innerHTML = marked.parse(md);
 
-    // 执行文章中的 <script>（innerHTML 插入的 script 不会自动执行）
     modalBody.querySelectorAll("script").forEach((old) => {
       const fresh = document.createElement("script");
       if (old.src) {
@@ -188,7 +155,6 @@ async function openPost(slug) {
       old.replaceWith(fresh);
     });
 
-    // 代码高亮
     modalBody.querySelectorAll("pre code").forEach((block) => {
       hljs.highlightElement(block);
     });
@@ -200,7 +166,6 @@ async function openPost(slug) {
 function closeModal() {
   modalOverlay.classList.remove("open");
   document.body.style.overflow = "";
-  // 清理文章注入的 style/script 残留
   modalBody.innerHTML = "";
 }
 

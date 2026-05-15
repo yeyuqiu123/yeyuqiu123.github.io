@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>笔记 — My Blog</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+</head>
+<body>
+  <canvas id="particles"></canvas>
+
+  <nav class="navbar" id="navbar">
+    <div class="nav-brand">
+      <a href="index.html">My Blog</a>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="菜单">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="index.html">首页</a></li>
+      <li><a href="posts.html" class="active">笔记</a></li>
+      <li><a href="index.html#about">关于</a></li>
+    </ul>
+  </nav>
+
+  <section class="posts-section" id="posts">
+    <h2 class="section-title">笔记文章</h2>
+    <div class="category-tabs" id="categoryTabs">
+      <button class="cat-tab active" data-cat="all">全部</button>
+      <button class="cat-tab" data-cat="408">408</button>
+      <button class="cat-tab" data-cat="高数">高数</button>
+      <button class="cat-tab" data-cat="线代">线代</button>
+    </div>
+    <div class="posts-grid" id="postsGrid"></div>
+  </section>
+
+  <footer class="footer">
+    <p>&copy; 2026 My Blog. Powered by GitHub Pages.</p>
+  </footer>
+
+  <!-- 文章详情模态框 -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal">
+      <button class="modal-close" id="modalClose">&times;</button>
+      <article class="modal-body" id="modalBody"></article>
+    </div>
+  </div>
+
+  <script src="js/particles.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.1/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/posts.js"></script>
+</body>
+</html>

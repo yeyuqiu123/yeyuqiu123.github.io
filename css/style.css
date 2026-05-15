@@ -200,7 +200,8 @@ a:hover { color: #a29bfe; }
 .posts-section {
   position: relative;
   z-index: 1;
-  padding: 5rem 2rem;
+  padding: 8rem 2rem 5rem;
+  min-height: 100vh;
 }
 
 /* 分类标签 */
@@ -321,41 +322,53 @@ a:hover { color: #a29bfe; }
 }
 
 .about-card {
-  max-width: 600px;
+  max-width: 700px;
   margin: 0 auto;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 2.5rem;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 3rem 2rem;
+  padding: 2.5rem 3rem;
 }
 
 .about-avatar {
-  display: block;
-  width: 100px;
-  height: 100px;
+  flex-shrink: 0;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   object-fit: cover;
-  margin: 0 auto 1.5rem;
+  border: 3px solid var(--accent);
 }
 
-.about-card p {
+.about-info {
+  flex: 1;
+}
+
+.about-name {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: .5rem;
+}
+
+.about-desc {
   color: var(--fg-muted);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.7;
 }
 
 .about-links {
   display: flex;
-  justify-content: center;
-  gap: 1rem;
+  gap: .75rem;
 }
 
 .about-link {
-  padding: .5rem 1.2rem;
+  padding: .4rem 1.1rem;
   border: 1px solid var(--border);
   border-radius: 50px;
   color: var(--fg-muted);
-  font-size: .9rem;
+  font-size: .85rem;
   transition: var(--transition);
 }
 
@@ -517,6 +530,21 @@ a:hover { color: #a29bfe; }
 
   .posts-grid {
     grid-template-columns: 1fr;
+  }
+
+  .about-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 2rem 1.5rem;
+  }
+
+  .about-avatar {
+    width: 90px;
+    height: 90px;
+  }
+
+  .about-links {
+    justify-content: center;
   }
 
   .modal {
