@@ -294,6 +294,8 @@ a:hover { color: #a29bfe; }
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), #a29bfe);
   margin: 0 auto 1.5rem;
+  background-size: cover;
+  background-position: center;
 }
 
 .about-card p {
