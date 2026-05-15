@@ -289,13 +289,12 @@ a:hover { color: #a29bfe; }
 }
 
 .about-avatar {
+  display: block;
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  object-fit: cover;
   margin: 0 auto 1.5rem;
-  background-size: cover;
-  background-position: center;
 }
 
 .about-card p {
