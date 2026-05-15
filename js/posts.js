@@ -52,6 +52,22 @@ function renderMath(container) {
   });
 }
 
+/* ===== TikZ 渲染 ===== */
+function renderTikz(container) {
+  container.querySelectorAll("pre code.language-tikz").forEach((block) => {
+    const code = block.textContent;
+    const pre = block.parentElement;
+    const script = document.createElement("script");
+    script.type = "text/tikz";
+    script.textContent = code;
+    pre.replaceWith(script);
+  });
+  // 通知 TikZJax 处理新插入的 script[type=text/tikz]
+  if (window.TikZJax) {
+    window.TikZJax.process();
+  }
+}
+
 /* ===== 博客文章索引 ===== */
 const POSTS_INDEX = [
   {
@@ -107,6 +123,15 @@ const POSTS_INDEX = [
     date: "2026-05-08",
     tags: ["线代", "矩阵"],
     excerpt: "矩阵是线性代数的基本工具，涵盖加减乘、转置、逆矩阵的定义与性质。",
+  },
+  {
+    slug: "tikz-demo",
+    type: "md",
+    category: "高数",
+    title: "TikZ 绘图演示",
+    date: "2026-05-07",
+    tags: ["高数", "TikZ", "绘图"],
+    excerpt: "在 Markdown 笔记中使用 TikZ 代码块绘制几何图形、函数图像和有向图。",
   },
 ];
 
@@ -201,6 +226,9 @@ async function openPost(slug) {
 
     // KaTeX 渲染 LaTeX 公式
     renderMath(modalBody);
+
+    // TikZ 代码块渲染
+    renderTikz(modalBody);
 
     modalBody.querySelectorAll("script").forEach((old) => {
       const fresh = document.createElement("script");
