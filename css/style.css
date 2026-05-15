@@ -249,13 +249,13 @@ a:hover { color: #a29bfe; }
   padding: 1.8rem;
   cursor: pointer;
   transition: var(--transition);
-  opacity: 0;
-  transform: translateY(20px);
-}
-
-.post-card.visible {
   opacity: 1;
   transform: translateY(0);
+}
+
+.post-card:not(.visible) {
+  opacity: 0;
+  transform: translateY(20px);
 }
 
 .post-card:hover {

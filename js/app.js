@@ -123,6 +123,10 @@ function renderPosts(cat) {
     postsGrid.appendChild(card);
   });
   document.querySelectorAll(".post-card").forEach((card) => observer.observe(card));
+  // 兜底：500ms 后强制显示所有卡片
+  setTimeout(() => {
+    document.querySelectorAll(".post-card:not(.visible)").forEach((card) => card.classList.add("visible"));
+  }, 500);
 }
 
 // 分类切换
