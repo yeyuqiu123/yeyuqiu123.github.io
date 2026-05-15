@@ -3,6 +3,7 @@ const POSTS_INDEX = [
   {
     slug: "hello-world",
     type: "md",
+    category: "408",
     title: "Hello World — 博客搭建记",
     date: "2026-05-13",
     tags: ["随笔", "博客"],
@@ -11,6 +12,7 @@ const POSTS_INDEX = [
   {
     slug: "css-animation-tips",
     type: "md",
+    category: "408",
     title: "CSS 动画实用技巧",
     date: "2026-05-12",
     tags: ["CSS", "前端"],
@@ -19,6 +21,7 @@ const POSTS_INDEX = [
   {
     slug: "github-pages-guide",
     type: "md",
+    category: "408",
     title: "GitHub Pages 部署指南",
     date: "2026-05-11",
     tags: ["GitHub", "部署"],
@@ -27,10 +30,29 @@ const POSTS_INDEX = [
   {
     slug: "html-demo",
     type: "html",
+    category: "408",
     title: "HTML 动画演示",
     date: "2026-05-10",
     tags: ["HTML", "动画", "演示"],
     excerpt: "在博客中直接运行 HTML 动画和 JS 交互：弹跳球、点击计数器、渐变流动卡片。",
+  },
+  {
+    slug: "calculus-derivative",
+    type: "md",
+    category: "高数",
+    title: "导数的定义与计算",
+    date: "2026-05-09",
+    tags: ["高数", "导数"],
+    excerpt: "导数是微积分的核心概念，本文从极限定义出发，梳理常见求导法则和链式法则。",
+  },
+  {
+    slug: "linear-algebra-matrix",
+    type: "md",
+    category: "线代",
+    title: "矩阵运算基础",
+    date: "2026-05-08",
+    tags: ["线代", "矩阵"],
+    excerpt: "矩阵是线性代数的基本工具，涵盖加减乘、转置、逆矩阵的定义与性质。",
   },
 ];
 
@@ -64,22 +86,44 @@ window.addEventListener("scroll", () => {
 
 /* ===== 渲染文章列表 ===== */
 const postsGrid = document.getElementById("postsGrid");
+const categoryTabs = document.getElementById("categoryTabs");
+let currentCat = "all";
 
-POSTS_INDEX.forEach((post, i) => {
-  const card = document.createElement("div");
-  card.className = "post-card";
-  card.style.transitionDelay = `${i * 0.1}s`;
-  card.innerHTML = `
-    <div class="post-date">${post.date}</div>
-    <div class="post-title">${post.title}</div>
-    <div class="post-excerpt">${post.excerpt}</div>
-    <div class="post-tags">
-      ${post.tags.map((t) => `<span class="tag">${t}</span>`).join("")}
-    </div>
-  `;
-  card.addEventListener("click", () => openPost(post.slug));
-  postsGrid.appendChild(card);
+function renderPosts(cat) {
+  postsGrid.innerHTML = "";
+  const filtered = cat === "all" ? POSTS_INDEX : POSTS_INDEX.filter((p) => p.category === cat);
+  filtered.forEach((post, i) => {
+    const card = document.createElement("div");
+    card.className = "post-card";
+    card.dataset.category = post.category;
+    card.style.transitionDelay = `${i * 0.1}s`;
+    card.innerHTML = `
+      <span class="post-cat">${post.category}</span>
+      <div class="post-date">${post.date}</div>
+      <div class="post-title">${post.title}</div>
+      <div class="post-excerpt">${post.excerpt}</div>
+      <div class="post-tags">
+        ${post.tags.map((t) => `<span class="tag">${t}</span>`).join("")}
+      </div>
+    `;
+    card.addEventListener("click", () => openPost(post.slug));
+    postsGrid.appendChild(card);
+  });
+  // 重新观察滚动动画
+  document.querySelectorAll(".post-card").forEach((card) => observer.observe(card));
+}
+
+// 分类切换
+categoryTabs.addEventListener("click", (e) => {
+  const btn = e.target.closest(".cat-tab");
+  if (!btn) return;
+  categoryTabs.querySelectorAll(".cat-tab").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+  currentCat = btn.dataset.cat;
+  renderPosts(currentCat);
 });
+
+renderPosts("all");
 
 /* ===== 滚动动画 (Intersection Observer) ===== */
 const observer = new IntersectionObserver(
