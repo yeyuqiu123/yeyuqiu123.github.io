@@ -52,51 +52,6 @@ function renderMath(container) {
   });
 }
 
-/* ===== TikZ 渲染 ===== */
-let tikzjaxLoaded = false;
-let tikzjaxLoadResolve = null;
-const tikzjaxReady = new Promise((resolve) => { tikzjaxLoadResolve = resolve; });
-
-function loadTikzjax() {
-  if (tikzjaxLoaded) return;
-  const s = document.createElement("script");
-  s.src = "https://tikzjax.com/v1/tikzjax.js";
-  s.onload = () => {
-    tikzjaxLoaded = true;
-    // TikZJax 的 window.onload 会在 DOMContentLoaded/onload 时自动执行
-    // 对于动态内容，直接调用它
-    if (typeof window.onload === "function") {
-      window.onload();
-    }
-    tikzjaxLoadResolve();
-  };
-  document.head.appendChild(s);
-}
-
-function renderTikz(container) {
-  const tikzBlocks = container.querySelectorAll("pre code.language-tikz");
-  if (tikzBlocks.length === 0) return;
-
-  // 把 tikz 代码块转为 <script type="text/tikz">
-  tikzBlocks.forEach((block) => {
-    const code = block.textContent;
-    const pre = block.parentElement;
-    const script = document.createElement("script");
-    script.type = "text/tikz";
-    script.textContent = code;
-    pre.replaceWith(script);
-  });
-
-  if (tikzjaxLoaded) {
-    // 已加载，直接重新触发渲染
-    if (typeof window.onload === "function") {
-      window.onload();
-    }
-  } else {
-    loadTikzjax();
-  }
-}
-
 /* ===== 博客文章索引 ===== */
 const POSTS_INDEX = [
   {
@@ -255,9 +210,6 @@ async function openPost(slug) {
 
     // KaTeX 渲染 LaTeX 公式
     renderMath(modalBody);
-
-    // TikZ 代码块渲染
-    renderTikz(modalBody);
 
     modalBody.querySelectorAll("script").forEach((old) => {
       const fresh = document.createElement("script");
