@@ -53,15 +53,25 @@ function renderMath(container) {
 }
 
 /* ===== TikZ 渲染 ===== */
-let tikzjaxOnload = null;
+let tikzjaxLoaded = false;
+let tikzjaxLoadResolve = null;
+const tikzjaxReady = new Promise((resolve) => { tikzjaxLoadResolve = resolve; });
 
-// 在 TikZJax 加载前拦截 window.onload，保存其处理器
-const origOnload = window.onload;
-Object.defineProperty(window, "onload", {
-  get() { return tikzjaxOnload || origOnload; },
-  set(fn) { tikzjaxOnload = fn; },
-  configurable: true
-});
+function loadTikzjax() {
+  if (tikzjaxLoaded) return;
+  const s = document.createElement("script");
+  s.src = "https://tikzjax.com/v1/tikzjax.js";
+  s.onload = () => {
+    tikzjaxLoaded = true;
+    // TikZJax 的 window.onload 会在 DOMContentLoaded/onload 时自动执行
+    // 对于动态内容，直接调用它
+    if (typeof window.onload === "function") {
+      window.onload();
+    }
+    tikzjaxLoadResolve();
+  };
+  document.head.appendChild(s);
+}
 
 function renderTikz(container) {
   const tikzBlocks = container.querySelectorAll("pre code.language-tikz");
@@ -77,19 +87,13 @@ function renderTikz(container) {
     pre.replaceWith(script);
   });
 
-  // 首次加载 TikZJax
-  if (!document.querySelector('script[data-tikzjax]')) {
-    const s = document.createElement("script");
-    s.src = "https://tikzjax.com/v1/tikzjax.js";
-    s.setAttribute("data-tikzjax", "");
-    s.onload = () => {
-      // TikZJax 设置了 window.onload，手动调用
-      if (tikzjaxOnload) tikzjaxOnload();
-    };
-    document.head.appendChild(s);
+  if (tikzjaxLoaded) {
+    // 已加载，直接重新触发渲染
+    if (typeof window.onload === "function") {
+      window.onload();
+    }
   } else {
-    // 已加载过，直接调用保存的 onload 处理器
-    if (tikzjaxOnload) tikzjaxOnload();
+    loadTikzjax();
   }
 }
 
