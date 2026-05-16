@@ -1,5 +1,1 @@
 username.github.io/
-# TikZ 源文件（编译后提交 SVG 即可）
-posts/*.tikz
-# TikZJax 失效，不再需要
-lib/

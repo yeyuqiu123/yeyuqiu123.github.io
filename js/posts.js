@@ -108,15 +108,6 @@ const POSTS_INDEX = [
     tags: ["线代", "矩阵"],
     excerpt: "矩阵是线性代数的基本工具，涵盖加减乘、转置、逆矩阵的定义与性质。",
   },
-  {
-    slug: "tikz-demo",
-    type: "md",
-    category: "高数",
-    title: "TikZ 绘图演示",
-    date: "2026-05-07",
-    tags: ["高数", "TikZ", "绘图"],
-    excerpt: "在 Markdown 笔记中使用 TikZ 代码块绘制几何图形、函数图像和有向图。",
-  },
 ];
 
 /* ===== 滚动动画 ===== */
