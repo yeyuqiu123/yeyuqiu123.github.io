@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>408 OS · 虚拟内存管理</title>
+<style>
+:root {
+  --primary: #4f46e5;
+  --primary-light: #818cf8;
+  --accent: #f59e0b;
+  --bg: #f8fafc;
+  --card: #ffffff;
+  --text: #1e293b;
+  --text-secondary: #64748b;
+  --border: #e2e8f0;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --info: #3b82f6;
+  --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -4px rgba(0,0,0,.1);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); min-height:100vh; }
+
+/* Layout */
+.app { display:flex; min-height:100vh; }
+.sidebar { width:260px; background: linear-gradient(180deg, #1e1b4b 0%, #312e81 100%); color:#fff; position:fixed; top:0; left:0; bottom:0; z-index:100; transition: transform .3s; overflow-y:auto; }
+.sidebar-header { padding:24px 20px 16px; border-bottom:1px solid rgba(255,255,255,.1); }
+.sidebar-header h1 { font-size:20px; font-weight:700; letter-spacing:-.5px; }
+.sidebar-header p { font-size:12px; opacity:.6; margin-top:4px; }
+.nav-list { list-style:none; padding:12px 10px; }
+.nav-item { margin-bottom:2px; }
+.nav-link { display:flex; align-items:center; gap:12px; padding:10px 14px; border-radius:8px; color:rgba(255,255,255,.65); text-decoration:none; font-size:14px; transition: all .2s; cursor:pointer; }
+.nav-link:hover { background:rgba(255,255,255,.08); color:#fff; }
+.nav-link.active { background:rgba(255,255,255,.15); color:#fff; font-weight:600; }
+.nav-icon { width:20px; height:20px; display:flex; align-items:center; justify-content:center; font-size:16px; }
+.main { margin-left:260px; flex:1; padding:0; }
+
+/* Pages */
+.page { display:none; padding:32px 40px 60px; max-width:960px; animation: fadeIn .3s; }
+.page.active { display:block; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* Typography */
+.page-title { font-size:28px; font-weight:800; margin-bottom:6px; color:#1e1b4b; }
+.page-subtitle { font-size:15px; color:var(--text-secondary); margin-bottom:32px; }
+.section-title { font-size:20px; font-weight:700; margin:36px 0 16px; color:#1e1b4b; display:flex; align-items:center; gap:10px; }
+.section-title::before { content:''; width:4px; height:22px; background:var(--primary); border-radius:2px; }
+.sub-title { font-size:16px; font-weight:600; margin:20px 0 10px; color:#334155; }
+
+/* Cards */
+.card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin-bottom:20px; box-shadow:var(--shadow); }
+.card-accent { border-left:4px solid var(--primary); }
+.card-success { border-left:4px solid var(--success); }
+.card-warning { border-left:4px solid var(--warning); }
+.card-danger { border-left:4px solid var(--danger); }
+.card h3 { font-size:16px; font-weight:600; margin-bottom:12px; }
+
+/* Lists */
+.knowledge-list { list-style:none; padding:0; }
+.knowledge-list li { padding:8px 0 8px 20px; position:relative; font-size:14px; line-height:1.7; }
+.knowledge-list li::before { content:'▸'; position:absolute; left:0; color:var(--primary); font-weight:700; }
+.feature-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:12px; }
+.feature-item { background:#f1f5f9; border-radius:8px; padding:16px; text-align:center; }
+.feature-item .label { font-size:13px; color:var(--text-secondary); margin-bottom:4px; }
+.feature-item .value { font-size:16px; font-weight:700; color:var(--primary); }
+
+/* Table */
+.table-wrap { overflow-x:auto; margin:12px 0; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+th { background:#f1f5f9; text-align:left; font-weight:600; }
+th,td { padding:10px 14px; border:1px solid var(--border); }
+tr:hover td { background:#f8fafc; }
+
+/* SVG diagrams */
+.diagram { background:#fff; border:1px solid var(--border); border-radius:12px; padding:20px; margin:16px 0; box-shadow:var(--shadow); }
+.diagram svg { width:100%; height:auto; }
+.diagram-label { font-size:12px; color:var(--text-secondary); text-align:center; margin-top:8px; }
+
+/* Animation boxes */
+.anim-flow { display:flex; align-items:center; gap:0; flex-wrap:wrap; margin:16px 0; }
+.anim-step { background:#f1f5f9; border:2px solid var(--border); border-radius:10px; padding:14px 18px; min-width:120px; text-align:center; font-size:13px; font-weight:500; transition: all .4s; position:relative; }
+.anim-step.highlight { background:#eef2ff; border-color:var(--primary); color:var(--primary); transform:scale(1.05); box-shadow:0 0 0 3px rgba(79,70,229,.15); }
+.anim-step.miss { background:#fef2f2; border-color:var(--danger); color:var(--danger); }
+.anim-arrow { font-size:20px; color:var(--text-secondary); margin:0 4px; }
+
+/* Interactive simulator */
+.simulator { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin:20px 0; box-shadow:var(--shadow-lg); }
+.sim-controls { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:16px; align-items:end; }
+.sim-controls label { font-size:13px; font-weight:500; color:var(--text-secondary); display:block; margin-bottom:4px; }
+.sim-controls input, .sim-controls select { padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
+.sim-controls input:focus, .sim-controls select:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+.btn { padding:8px 18px; border:none; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; transition:all .2s; }
+.btn-primary { background:var(--primary); color:#fff; }
+.btn-primary:hover { background:#4338ca; }
+.btn-sm { padding:6px 12px; font-size:12px; }
+.sim-grid { display:flex; gap:4px; margin:12px 0; flex-wrap:wrap; }
+.sim-frame { width:52px; height:52px; border:2px solid var(--border); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:700; transition:all .3s; background:#fff; }
+.sim-frame.filled { background:#eef2ff; border-color:var(--primary-light); color:var(--primary); }
+.sim-frame.new { animation: popIn .4s; background:#dcfce7; border-color:var(--success); }
+.sim-frame.replace { animation: shake .4s; background:#fef2f2; border-color:var(--danger); color:var(--danger); }
+@keyframes popIn { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+.sim-ref-string { display:flex; gap:6px; margin:12px 0; flex-wrap:wrap; }
+.sim-ref-item { width:36px; height:36px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:600; background:#f1f5f9; border:1px solid var(--border); transition:all .3s; }
+.sim-ref-item.current { background:var(--primary); color:#fff; border-color:var(--primary); }
+.sim-ref-item.done { background:#e2e8f0; color:var(--text-secondary); }
+.sim-ref-item.hit { background:#dcfce7; color:#166534; border-color:#86efac; }
+.sim-ref-item.miss { background:#fef2f2; color:#991b1b; border-color:#fca5a5; }
+.sim-log { max-height:200px; overflow-y:auto; font-size:13px; font-family:'Consolas','Monaco',monospace; background:#1e293b; color:#e2e8f0; padding:14px; border-radius:8px; margin-top:12px; line-height:1.8; }
+.sim-stats { display:flex; gap:20px; margin-top:12px; }
+.sim-stat { text-align:center; }
+.sim-stat .num { font-size:24px; font-weight:800; }
+.sim-stat .lbl { font-size:12px; color:var(--text-secondary); }
+
+/* CLOCK animation */
+.clock-container { display:flex; flex-direction:column; align-items:center; margin:16px 0; }
+.clock-ring { position:relative; width:200px; height:200px; }
+.clock-page { position:absolute; width:56px; height:56px; border-radius:50%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-size:16px; font-weight:700; border:3px solid var(--border); background:#fff; transition:all .3s; }
+.clock-page.pointer { border-color:var(--danger); box-shadow:0 0 0 3px rgba(239,68,68,.2); }
+.clock-page.selected { background:#fef2f2; border-color:var(--danger); transform:scale(1.15); }
+.clock-bits { font-size:10px; color:var(--text-secondary); font-weight:500; }
+
+/* Working set animation */
+.ws-container { margin:16px 0; }
+.ws-chart { position:relative; height:160px; background:repeating-linear-gradient(0deg,transparent,transparent 39px,#f1f5f9 39px,#f1f5f9 40px); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.ws-window { position:absolute; top:0; bottom:0; width:80px; background:rgba(79,70,229,.08); border:2px dashed var(--primary); border-radius:4px; transition:left .5s; }
+.ws-window-label { position:absolute; top:4px; left:50%; transform:translateX(-50%); font-size:11px; color:var(--primary); font-weight:600; white-space:nowrap; }
+.ws-page-dot { position:absolute; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:#fff; transition:all .3s; }
+
+/* Calculator */
+.calc { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:24px; margin:16px 0; box-shadow:var(--shadow); }
+.calc-row { display:flex; gap:16px; margin-bottom:12px; flex-wrap:wrap; }
+.calc-field { flex:1; min-width:180px; }
+.calc-field label { display:block; font-size:13px; font-weight:500; margin-bottom:4px; color:var(--text-secondary); }
+.calc-field input { width:100%; padding:8px 12px; border:1px solid var(--border); border-radius:6px; font-size:14px; }
+.calc-field input:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 3px rgba(79,70,229,.1); }
+.calc-result { background:#f1f5f9; border-radius:8px; padding:16px; margin-top:12px; }
+.calc-result .formula { font-size:13px; color:var(--text-secondary); margin-bottom:4px; font-family:'Consolas',monospace; }
+.calc-result .answer { font-size:22px; font-weight:800; color:var(--primary); }
+
+/* Comparison cards */
+.algo-compare { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; margin:16px 0; }
+.algo-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:18px; box-shadow:var(--shadow); }
+.algo-card h4 { font-size:15px; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+.algo-card .tag { display:inline-block; font-size:11px; padding:2px 8px; border-radius:10px; font-weight:600; }
+.tag-best { background:#dcfce7; color:#166534; }
+.tag-warn { background:#fef3c7; color:#92400e; }
+.tag-bad { background:#fef2f2; color:#991b1b; }
+
+/* Key-point highlight */
+.key-point { background:linear-gradient(135deg,#fef3c7,#fde68a); border:1px solid #fbbf24; border-radius:8px; padding:14px 18px; margin:12px 0; font-size:14px; }
+.key-point strong { color:#92400e; }
+
+/* Responsive */
+@media(max-width:900px) {
+  .sidebar { transform:translateX(-100%); }
+  .sidebar.open { transform:translateX(0); }
+  .main { margin-left:0; }
+  .page { padding:20px; }
+  .mobile-toggle { display:block!important; }
+}
+.mobile-toggle { display:none; position:fixed; top:12px; left:12px; z-index:200; background:var(--primary); color:#fff; border:none; width:40px; height:40px; border-radius:8px; font-size:20px; cursor:pointer; }
+
+/* Tooltip */
+.tip { position:relative; cursor:help; border-bottom:1px dashed var(--primary-light); }
+.tip:hover::after { content:attr(data-tip); position:absolute; bottom:100%; left:50%; transform:translateX(-50%); background:#1e293b; color:#fff; padding:6px 10px; border-radius:6px; font-size:12px; white-space:nowrap; z-index:10; }
+
+/* Step indicator for address translation */
+.addr-trans-steps { counter-reset: step; }
+.addr-trans-step { display:flex; gap:16px; margin:10px 0; padding:12px; border-radius:8px; background:#f8fafc; transition:all .3s; }
+.addr-trans-step.active { background:#eef2ff; border-left:3px solid var(--primary); }
+.addr-trans-step .step-num { width:28px; height:28px; border-radius:50%; background:var(--primary); color:#fff; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; flex-shrink:0; }
+.addr-trans-step .step-content { font-size:14px; line-height:1.6; }
+</style>
+</head>
+<body>
+<button class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">☰</button>
+
+<div class="app">
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>📄 虚拟内存管理</h1>
+    <p>408 操作系统 · 知识点整理</p>
+  </div>
+  <ul class="nav-list">
+    <li class="nav-item"><a class="nav-link active" data-page="overview"><span class="nav-icon">📖</span>虚拟内存概述</a></li>
+    <li class="nav-item"><a class="nav-link" data-page="paging"><span class="nav-icon">📋</span>请求分页管理</a></li>
+    <li class="nav-item"><a class="nav-link" data-page="replacement"><span class="nav-icon">🔄</span>页面置换算法</a></li>
+    <li class="nav-item"><a class="nav-link" data-page="strategy"><span class="nav-icon">⚙️</span>分配与置换策略</a></li>
+    <li class="nav-item"><a class="nav-link" data-page="thrashing"><span class="nav-icon">📊</span>抖动与工作集</a></li>
+    <li class="nav-item"><a class="nav-link" data-page="performance"><span class="nav-icon">🧮</span>性能分析</a></li>
+  </ul>
+</aside>
+
+<div class="main">
+
+<!-- ==================== PAGE 1: 虚拟内存概述 ==================== -->
+<div class="page active" id="page-overview">
+  <h2 class="page-title">虚拟内存概述</h2>
+  <p class="page-subtitle">理解虚拟内存的动机、定义与核心特征</p>
+
+  <div class="section-title">为什么需要虚拟内存？</div>
+  <div class="card card-accent">
+    <div class="knowledge-list">
+      <li><strong>程序规模增长</strong>：程序越来越大，物理内存无法容纳全部程序</li>
+      <li><strong>多道程序并发</strong>：多个程序同时运行，内存不够分</li>
+      <li><strong>局部性原理</strong>：程序在一段时间内只访问一小部分内存 → 不需要全部装入</li>
+    </div>
+  </div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 280" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#4f46e5"/></marker>
+        <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#818cf8"/><stop offset="100%" stop-color="#4f46e5"/></linearGradient>
+        <linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fbbf24"/><stop offset="100%" stop-color="#f59e0b"/></linearGradient>
+      </defs>
+      <text x="400" y="24" text-anchor="middle" font-size="15" font-weight="700" fill="#1e293b">虚拟内存 = 局部性原理 + 请求调页</text>
+      <rect x="60" y="44" width="300" height="210" rx="12" fill="url(#g1)" opacity=".9"/>
+      <text x="210" y="72" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">虚拟地址空间（大）</text>
+      <rect x="80" y="84" width="260" height="28" rx="4" fill="rgba(255,255,255,.3)"/><text x="210" y="103" text-anchor="middle" font-size="12" fill="#fff">页0 ✓ 在内存</text>
+      <rect x="80" y="118" width="260" height="28" rx="4" fill="rgba(255,255,255,.15)"/><text x="210" y="137" text-anchor="middle" font-size="12" fill="rgba(255,255,255,.6)">页1 ✗ 在磁盘</text>
+      <rect x="80" y="152" width="260" height="28" rx="4" fill="rgba(255,255,255,.3)"/><text x="210" y="171" text-anchor="middle" font-size="12" fill="#fff">页2 ✓ 在内存</text>
+      <rect x="80" y="186" width="260" height="28" rx="4" fill="rgba(255,255,255,.15)"/><text x="210" y="205" text-anchor="middle" font-size="12" fill="rgba(255,255,255,.6)">页3 ✗ 在磁盘</text>
+
+      <rect x="440" y="74" width="300" height="140" rx="12" fill="url(#g2)" opacity=".9"/>
+      <text x="590" y="102" text-anchor="middle" font-size="14" font-weight="700" fill="#fff">物理内存（小）</text>
+      <rect x="460" y="114" width="260" height="28" rx="4" fill="rgba(255,255,255,.4)"/><text x="590" y="133" text-anchor="middle" font-size="12" fill="#fff">帧0 ← 页0</text>
+      <rect x="460" y="148" width="260" height="28" rx="4" fill="rgba(255,255,255,.4)"/><text x="590" y="167" text-anchor="middle" font-size="12" fill="#fff">帧1 ← 页2</text>
+
+      <line x1="340" y1="98" x2="460" y2="128" stroke="#4f46e5" stroke-width="2" marker-end="url(#arrow)"/>
+      <line x1="340" y1="166" x2="460" y2="162" stroke="#4f46e5" stroke-width="2" marker-end="url(#arrow)"/>
+
+      <text x="400" y="268" text-anchor="middle" font-size="12" fill="#64748b">只把需要的页面装入内存，其余留在磁盘</text>
+    </svg>
+  </div>
+
+  <div class="section-title">虚拟内存的定义</div>
+  <div class="card card-success">
+    <p style="font-size:15px;line-height:1.8">基于<strong>局部性原理</strong>，在程序执行时只将当前需要的部分装入内存，其余部分留在外存。当访问的信息不在内存时，由OS将所需信息从外存调入内存；内存空间不够时，将内存中暂时不用的内容换出到外存。</p>
+  </div>
+
+  <div class="section-title">虚拟内存的四大特征</div>
+  <div class="feature-grid">
+    <div class="feature-item"><div class="label">① 多次性</div><div class="value" style="font-size:14px">作业无需一次性全部装入</div></div>
+    <div class="feature-item"><div class="label">② 对换性</div><div class="value" style="font-size:14px">运行中可换入/换出</div></div>
+    <div class="feature-item"><div class="label">③ 虚拟性</div><div class="value" style="font-size:14px">逻辑上扩充内存容量</div></div>
+    <div class="feature-item"><div class="label">④ 离散性</div><div class="value" style="font-size:14px">不必连续分配内存</div></div>
+  </div>
+
+  <div class="key-point"><strong>⚠️ 易错：</strong>虚拟内存的"多次性"是<strong>最核心</strong>的特征，是与传统连续分配的根本区别。"虚拟性"是<strong>结果/表现</strong>，不是本质特征（考试陷阱！）</div>
+
+  <div class="section-title">虚拟内存的三种实现方式</div>
+  <div class="table-wrap">
+    <table>
+      <tr><th>实现方式</th><th>离散分配基础</th><th>换入/换出单位</th><th>优缺点</th></tr>
+      <tr><td><strong>请求分页</strong></td><td>基本分页</td><td>页</td><td>最常用，产生内部碎片</td></tr>
+      <tr><td>请求分段</td><td>基本分段</td><td>段</td><td>便于共享/保护，产生外部碎片</td></tr>
+      <tr><td>请求段页式</td><td>基本段页式</td><td>页</td><td>结合两者优点，实现复杂</td></tr>
+    </table>
+  </div>
+
+  <div class="key-point"><strong>⚠️ 前提条件：</strong>虚拟内存的实现需要<strong>一定容量的内存和外存</strong> + <strong>页表机制/段表机制</strong> + <strong>中断机构</strong> + <strong>地址变换机构</strong></div>
+</div>
+
+<!-- ==================== PAGE 2: 请求分页管理 ==================== -->
+<div class="page" id="page-paging">
+  <h2 class="page-title">请求分页管理</h2>
+  <p class="page-subtitle">页表项结构、缺页中断机制与地址变换过程</p>
+
+  <div class="section-title">请求分页 vs 基本分页</div>
+  <div class="card card-accent">
+    <div class="knowledge-list">
+      <li>基本分页：程序<strong>全部</strong>装入内存后才运行，<strong>不会</strong>缺页</li>
+      <li>请求分页：程序<strong>部分</strong>装入即可运行，访问到不在内存的页时产生<strong>缺页中断</strong></li>
+      <li>区别的核心：多了<strong>缺页中断</strong>和<strong>页面置换</strong>功能</li>
+    </div>
+  </div>
+
+  <div class="section-title">请求分页的页表项</div>
+  <div class="diagram">
+    <svg viewBox="0 0 800 200" xmlns="http://www.w3.org/2000/svg">
+      <rect x="30" y="40" width="90" height="50" rx="6" fill="#4f46e5"/><text x="75" y="70" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">页号</text>
+      <rect x="130" y="40" width="90" height="50" rx="6" fill="#4f46e5"/><text x="175" y="70" text-anchor="middle" font-size="13" font-weight="700" fill="#fff">物理块号</text>
+      <rect x="230" y="40" width="90" height="50" rx="6" fill="#10b981"/><text x="275" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">状态位P</text>
+      <rect x="330" y="40" width="90" height="50" rx="6" fill="#f59e0b"/><text x="375" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">访问字段A</text>
+      <rect x="430" y="40" width="90" height="50" rx="6" fill="#ef4444"/><text x="475" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">修改位M</text>
+      <rect x="530" y="40" width="110" height="50" rx="6" fill="#8b5cf6"/><text x="585" y="70" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">外存地址</text>
+      <text x="75" y="120" text-anchor="middle" font-size="12" fill="#64748b">页在内存的</text><text x="75" y="136" text-anchor="middle" font-size="12" fill="#64748b">编号</text>
+      <text x="275" y="120" text-anchor="middle" font-size="12" fill="#64748b">1=在内存</text><text x="275" y="136" text-anchor="middle" font-size="12" fill="#64748b">0=不在内存</text>
+      <text x="375" y="120" text-anchor="middle" font-size="12" fill="#64748b">记录最近访问</text><text x="375" y="136" text-anchor="middle" font-size="12" fill="#64748b">供置换算法参考</text>
+      <text x="475" y="120" text-anchor="middle" font-size="12" fill="#64748b">1=被修改过</text><text x="475" y="136" text-anchor="middle" font-size="12" fill="#64748b">换出时需写回磁盘</text>
+      <text x="585" y="120" text-anchor="middle" font-size="12" fill="#64748b">该页在磁盘上的</text><text x="585" y="136" text-anchor="middle" font-size="12" fill="#64748b">位置</text>
+    </svg>
+  </div>
+
+  <div class="section-title">缺页中断机构</div>
+  <div class="card card-warning">
+    <h3>缺页中断处理流程</h3>
+    <div class="anim-flow" id="fault-flow">
+      <div class="anim-step" data-step="1">① CPU访问页面<br><small>查找页表项</small></div>
+      <div class="anim-arrow">→</div>
+      <div class="anim-step" data-step="2">② 检查状态位P<br><small>P=0 缺页！</small></div>
+      <div class="anim-arrow">→</div>
+      <div class="anim-step" data-step="3">③ 产生缺页中断<br><small>转入中断处理</small></div>
+      <div class="anim-arrow">→</div>
+      <div class="anim-step" data-step="4">④ 查找空闲物理块<br><small>有→直接调入</small></div>
+      <div class="anim-arrow">→</div>
+      <div class="anim-step" data-step="5">⑤ 无空闲块<br><small>页面置换</small></div>
+      <div class="anim-arrow">→</div>
+      <div class="anim-step" data-step="6">⑥ 从外存调入页面<br><small>更新页表</small></div>
+    </div>
+    <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="animateFaultFlow()">▶ 播放动画</button></div>
+  </div>
+
+  <div class="section-title">缺页中断 vs 一般中断</div>
+  <div class="table-wrap">
+    <table>
+      <tr><th>比较项</th><th>一般中断</th><th>缺页中断</th></tr>
+      <tr><td>产生时机</td><td>指令执行完成后</td><td>指令执行<strong>期间</strong></td></tr>
+      <tr><td>一条指令产生次数</td><td>1次</td><td>可能<strong>多次</strong>（如跨页指令）</td></tr>
+      <tr><td>处理程序功能</td><td>I/O完成等</td><td>将页面从外存调入内存</td></tr>
+    </table>
+  </div>
+  <div class="key-point"><strong>⚠️ 关键区别：</strong>缺页中断在指令执行<strong>期间</strong>产生，一条指令可能引发<strong>多次</strong>缺页中断（如指令本身跨页 + 操作数跨页）</div>
+
+  <div class="section-title">地址变换过程（动态演示）</div>
+  <div class="card">
+    <div class="addr-trans-steps" id="addr-trans">
+      <div class="addr-trans-step" data-step="1"><span class="step-num">1</span><div class="step-content">CPU给出虚拟地址，由<strong>页号P</strong>和<strong>页内偏移W</strong>组成</div></div>
+      <div class="addr-trans-step" data-step="2"><span class="step-num">2</span><div class="step-content">用页号P检索页表，找到对应页表项</div></div>
+      <div class="addr-trans-step" data-step="3"><span class="step-num">3</span><div class="step-content">检查<strong>状态位P</strong>：若P=1，页面在内存 → 转④；若P=0，产生缺页中断 → 转缺页处理</div></div>
+      <div class="addr-trans-step" data-step="4"><span class="step-num">4</span><div class="step-content">P=1时，将物理块号 + 页内偏移W 拼接成<strong>物理地址</strong></div></div>
+      <div class="addr-trans-step" data-step="5"><span class="step-num">5</span><div class="step-content">更新<strong>访问字段A</strong>（=1），若是写操作还需更新<strong>修改位M</strong>（=1）</div></div>
+    </div>
+    <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="animateAddrTrans()">▶ 播放动画</button></div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 3: 页面置换算法 ==================== -->
+<div class="page" id="page-replacement">
+  <h2 class="page-title">页面置换算法</h2>
+  <p class="page-subtitle">OPT / FIFO / LRU / CLOCK 算法原理与交互式模拟</p>
+
+  <div class="section-title">算法速览对比</div>
+  <div class="algo-compare">
+    <div class="algo-card">
+      <h4>🥇 OPT 最佳置换 <span class="tag tag-best">理论最优</span></h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">淘汰<strong>未来最长时间不再访问</strong>的页面。无法实现，仅作衡量标准。</p>
+    </div>
+    <div class="algo-card">
+      <h4>🥈 FIFO 先进先出 <span class="tag tag-warn">有Belady异常</span></h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">淘汰<strong>最早进入内存</strong>的页面。性能差，可能产生Belady异常。</p>
+    </div>
+    <div class="algo-card">
+      <h4>🥉 LRU 最近最久未用 <span class="tag tag-best">性能好</span></h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">淘汰<strong>最近最长时间未被访问</strong>的页面。性能接近OPT，但实现开销大。</p>
+    </div>
+    <div class="algo-card">
+      <h4>🕐 CLOCK 时钟算法 <span class="tag tag-best">实用折中</span></h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">简单CLOCK只看<strong>访问位A</strong>；改进型同时考虑<strong>访问位A+修改位M</strong>，按(0,0)→(0,1)→(1,0)→(1,1)优先淘汰，减少磁盘I/O。</p>
+    </div>
+  </div>
+
+  <div class="section-title">Belady 异常</div>
+  <div class="card card-danger">
+    <p style="font-size:14px;line-height:1.8"><strong>定义：</strong>FIFO算法中，分配给进程的物理块数<strong>增加</strong>，缺页次数反而<strong>增加</strong>的异常现象。</p>
+    <p style="font-size:14px;line-height:1.8;margin-top:8px"><strong>原因：</strong>FIFO的替换决策与进程使用页面的历史无关，只看进入顺序。FIFO和未基于"栈算法"的算法才会出现。</p>
+    <p style="font-size:14px;line-height:1.8;margin-top:8px"><strong>结论：</strong>LRU、OPT 基于"栈算法"，<strong>不会</strong>出现Belady异常。</p>
+  </div>
+
+  <div class="section-title">简单 CLOCK 算法</div>
+  <div class="card card-accent">
+    <h3>原理</h3>
+    <div class="knowledge-list">
+      <li>为每页设置一个<strong>访问位A</strong>，将页面组织成<strong>循环链表</strong>（环形）</li>
+      <li>指针循环扫描：若当前页A=0，则淘汰；若A=1，则将A置0，跳过继续扫描</li>
+      <li>最多扫描<strong>一整圈</strong>后，所有A都被置0，一定能找到淘汰页</li>
+    </div>
+    <div class="key-point" style="margin-top:8px"><strong>核心思路：</strong>最近访问过的页(A=1)给它"第二次机会"，跳过并将A置0；未被访问(A=0)的直接淘汰</div>
+  </div>
+
+  <div class="sub-title">🔵 简单 CLOCK 环形演示（仅看访问位A）</div>
+  <div class="card" style="text-align:center">
+    <div class="clock-container">
+      <svg viewBox="0 0 200 200" width="200" height="200" id="simple-clock-svg"></svg>
+    </div>
+    <div style="margin:12px 0;font-size:13px;color:#64748b">
+      <label>帧数：</label>
+      <select id="simple-clock-frames" onchange="drawSimpleClock()">
+        <option value="4">4</option>
+        <option value="5" selected>5</option>
+        <option value="6">6</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="simpleClockStep()" style="margin-left:8px">▶ 单步扫描</button>
+      <button class="btn btn-sm" onclick="resetSimpleClock()" style="margin-left:4px;background:#e2e8f0">重置</button>
+    </div>
+    <div id="simple-clock-log" style="font-size:13px;color:#64748b;min-height:20px"></div>
+  </div>
+
+  <div class="section-title">改进型 CLOCK 算法详解</div>
+  <div class="card">
+    <h3>（访问位A, 修改位M）四种页面类型</h3>
+    <div class="table-wrap">
+      <table>
+        <tr><th>优先级</th><th>(A, M)</th><th>含义</th><th>淘汰选择</th></tr>
+        <tr style="background:#dcfce7"><td>第1选择</td><td>(0, 0)</td><td>最近未访问且未修改</td><td>✅ 最佳淘汰对象</td></tr>
+        <tr><td>第2选择</td><td>(0, 1)</td><td>最近未访问但已修改</td><td>淘汰时需写回磁盘</td></tr>
+        <tr><td>第3选择</td><td>(1, 0)</td><td>最近访问过但未修改</td><td>可能还会再用</td></tr>
+        <tr style="background:#fef2f2"><td>第4选择</td><td>(1, 1)</td><td>最近访问过且已修改</td><td>❌ 最不应淘汰</td></tr>
+      </table>
+    </div>
+    <p style="font-size:13px;color:#64748b;margin-top:8px">扫描时：<strong>第1轮</strong>找(0,0)，途中将A置0 → <strong>第2轮</strong>找(0,1)，途中将M置0 → <strong>第3轮</strong>找(0,0) → <strong>第4轮</strong>找(0,1)。最多4轮必能找到。</p>
+  </div>
+
+  <div class="sub-title">🔴 改进型 CLOCK 环形演示（看访问位A + 修改位M）</div>
+  <div class="card" style="text-align:center">
+    <div class="clock-container">
+      <div class="clock-ring" id="clock-ring">
+        <svg viewBox="0 0 200 200" width="200" height="200" id="clock-svg"></svg>
+      </div>
+    </div>
+    <div style="margin:12px 0;font-size:13px;color:#64748b">
+      <label>帧数：</label>
+      <select id="clock-frames" onchange="drawClock()">
+        <option value="4">4</option>
+        <option value="5" selected>5</option>
+        <option value="6">6</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="clockStep()" style="margin-left:8px">▶ 单步扫描</button>
+      <button class="btn btn-sm" onclick="resetClock()" style="margin-left:4px;background:#e2e8f0">重置</button>
+    </div>
+    <div id="clock-log" style="font-size:13px;color:#64748b;min-height:20px"></div>
+  </div>
+
+  <div class="section-title">交互式页面置换模拟器</div>
+  <div class="simulator">
+    <div class="sim-controls">
+      <div><label>引用串</label><input id="sim-ref" value="7,0,1,2,0,3,0,4,2,3,0,3,2,1,2,0,1,7,0,1" style="width:260px"></div>
+      <div><label>物理块数</label><input id="sim-frames" type="number" value="3" min="1" max="8" style="width:60px"></div>
+      <div><label>算法</label><select id="sim-algo"><option value="FIFO">FIFO</option><option value="LRU">LRU</option><option value="OPT">OPT</option></select></div>
+      <div><button class="btn btn-primary" onclick="startSimulation()">开始模拟</button></div>
+      <div><button class="btn btn-sm" onclick="simNextStep()" id="sim-step-btn" disabled>下一步</button></div>
+      <div><button class="btn btn-sm" onclick="simAutoPlay()" id="sim-auto-btn" disabled>自动播放</button></div>
+    </div>
+    <div style="font-size:13px;color:#64748b;margin-bottom:8px">引用串：</div>
+    <div class="sim-ref-string" id="sim-ref-display"></div>
+    <div style="font-size:13px;color:#64748b;margin:8px 0">物理块状态：</div>
+    <div class="sim-grid" id="sim-frame-display"></div>
+    <div class="sim-stats" id="sim-stats">
+      <div class="sim-stat"><div class="num" id="sim-faults" style="color:var(--danger)">0</div><div class="lbl">缺页次数</div></div>
+      <div class="sim-stat"><div class="num" id="sim-hits" style="color:var(--success)">0</div><div class="lbl">命中次数</div></div>
+      <div class="sim-stat"><div class="num" id="sim-rate" style="color:var(--primary)">0%</div><div class="lbl">缺页率</div></div>
+    </div>
+    <div class="sim-log" id="sim-log">等待开始模拟...</div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 4: 分配与置换策略 ==================== -->
+<div class="page" id="page-strategy">
+  <h2 class="page-title">分配与置换策略</h2>
+  <p class="page-subtitle">驻留集、分配策略、页面调入时机与来源</p>
+
+  <div class="section-title">驻留集</div>
+  <div class="card card-accent">
+    <p style="font-size:14px;line-height:1.8"><strong>驻留集</strong>：分配给进程的<strong>物理块集合</strong>。驻留集大小决定了内存中能保留的页面数，直接影响缺页率。</p>
+    <div class="knowledge-list" style="margin-top:12px">
+      <li>驻留集<strong>太小</strong>：缺页频繁，进程频繁换页（抖动）</li>
+      <li>驻留集<strong>太大</strong>：内存利用率低，并发度下降</li>
+      <li>驻留集<strong>适中</strong>：缺页率可接受，CPU利用率最高</li>
+    </div>
+  </div>
+
+  <div class="section-title">三种分配策略</div>
+  <div class="table-wrap">
+    <table>
+      <tr><th>策略</th><th>物理块数</th><th>置换范围</th><th>优点</th><th>缺点</th></tr>
+      <tr><td><strong>固定分配局部置换</strong></td><td>进程创建时固定</td><td>仅在本进程的块中</td><td>各进程互不影响</td><td>块数不合理时难以调整</td></tr>
+      <tr><td><strong>可变分配全局置换</strong></td><td>可动态增减</td><td>可从其他进程夺取</td><td>灵活、实现简单</td><td>可能干扰其他进程</td></tr>
+      <tr><td><strong>可变分配局部置换</strong></td><td>可动态增减</td><td>仅在本进程的块中</td><td>兼顾灵活与隔离</td><td>实现复杂</td></tr>
+    </table>
+  </div>
+  <div class="key-point"><strong>⚠️ 高频考点：</strong>"可变分配全局置换"是最常用的策略。缺页时从空闲块中分配，无空闲块时才从其他进程夺取。</div>
+
+  <div class="section-title">页面调入时机</div>
+  <div class="algo-compare">
+    <div class="algo-card">
+      <h4>📅 预调页策略</h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">一次调入<strong>若干相邻页面</strong>，利用空间局部性。适用于<strong>进程首次调入</strong>时，预测困难。</p>
+    </div>
+    <div class="algo-card">
+      <h4>📨 请求调页策略</h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">访问到不在内存的页时才调入，一次只调<strong>一页</strong>。实现简单，是<strong>主要策略</strong>，但I/O开销大。</p>
+    </div>
+  </div>
+
+  <div class="section-title">从何处调入页面</div>
+  <div class="card">
+    <div class="knowledge-list">
+      <li><strong>对换区足够</strong>：进程运行前从文件区复制到对换区，之后全部从<strong>对换区</strong>调入（对换区采用连续分配，I/O速度更快）</li>
+      <li><strong>对换区不够</strong>：不会修改的页面从<strong>文件区</strong>调入；可能修改的页面从对换区调入</li>
+      <li><strong>UNIX方式</strong>：首次使用从文件区调入，换出时写入对换区，再次调入从对换区调入</li>
+    </div>
+  </div>
+  <div class="key-point"><strong>⚠️ 关键区别：</strong>文件区存放程序原文件（离散分配，I/O慢），对换区存放换出的页面（连续分配，I/O快）。优先从对换区调入。</div>
+</div>
+
+<!-- ==================== PAGE 5: 抖动与工作集 ==================== -->
+<div class="page" id="page-thrashing">
+  <h2 class="page-title">抖动与工作集</h2>
+  <p class="page-subtitle">理解抖动现象、工作集模型与预防策略</p>
+
+  <div class="section-title">抖动（Thrashing）</div>
+  <div class="card card-danger">
+    <p style="font-size:14px;line-height:1.8"><strong>定义：</strong>系统中同时运行的进程太多，每个进程分到的物理块太少，频繁发生缺页，导致<strong>CPU利用率急剧下降</strong>的现象。</p>
+    <p style="font-size:14px;line-height:1.8;margin-top:8px"><strong>表现：</strong>进程大部分时间用于页面换入换出，CPU利用率极低，OS以为需要增加并发度 → 更多进程 → 更严重 → 恶性循环</p>
+  </div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 800 260" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="gCpu" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#10b981"/><stop offset="50%" stop-color="#10b981"/><stop offset="80%" stop-color="#f59e0b"/><stop offset="100%" stop-color="#ef4444"/></linearGradient>
+      </defs>
+      <text x="400" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="#1e293b">多道程序度与CPU利用率的关系（抖动示意图）</text>
+      <line x1="60" y1="40" x2="60" y2="230" stroke="#94a3b8" stroke-width="1.5"/>
+      <line x1="60" y1="230" x2="760" y2="230" stroke="#94a3b8" stroke-width="1.5"/>
+      <text x="30" y="140" text-anchor="middle" font-size="12" fill="#64748b" transform="rotate(-90,30,140)">CPU利用率</text>
+      <text x="410" y="256" text-anchor="middle" font-size="12" fill="#64748b">多道程序度（进程数N）</text>
+      <path d="M60,60 Q200,60 320,55 Q400,52 440,55 Q480,65 500,90 Q520,140 540,200 Q550,220 580,225 Q620,228 700,228 L760,228" fill="none" stroke="url(#gCpu)" stroke-width="3"/>
+      <circle cx="440" cy="55" r="5" fill="#10b981"/>
+      <text x="440" y="46" text-anchor="middle" font-size="12" font-weight="700" fill="#10b981">N₀ 最优点</text>
+      <rect x="500" y="80" width="80" height="24" rx="4" fill="#fef2f2" stroke="#ef4444" stroke-width="1"/>
+      <text x="540" y="96" text-anchor="middle" font-size="11" font-weight="700" fill="#ef4444">⚠️ 抖动区</text>
+      <line x1="500" y1="55" x2="500" y2="230" stroke="#ef4444" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="480" y="248" text-anchor="middle" font-size="11" fill="#ef4444">N₁</text>
+    </svg>
+  </div>
+
+  <div class="section-title">工作集（Working Set）</div>
+  <div class="card card-accent">
+    <p style="font-size:14px;line-height:1.8"><strong>定义：</strong>在某段时间间隔（工作集窗口 Δ）内，进程实际访问的<strong>页面集合</strong>。</p>
+    <div class="knowledge-list" style="margin-top:12px">
+      <li>工作集大小随 Δ 增大而增大</li>
+      <li>工作集是<strong>近期</strong>访问页面的集合，反映局部性</li>
+      <li>驻留集 ≥ 工作集 → 不会抖动；驻留集 < 工作集 → 可能抖动</li>
+    </div>
+  </div>
+
+  <div class="section-title">工作集动态演示</div>
+  <div class="card">
+    <div style="margin-bottom:12px;font-size:13px">
+      <label>工作集窗口 Δ = </label>
+      <input id="ws-delta" type="range" min="2" max="6" value="4" style="vertical-align:middle" oninput="updateWorkingSet()">
+      <span id="ws-delta-val">4</span>
+      <button class="btn btn-primary btn-sm" onclick="wsAnimate()" style="margin-left:12px">▶ 播放滑动</button>
+    </div>
+    <div class="ws-container">
+      <div style="font-size:13px;color:#64748b;margin-bottom:6px">页面访问序列（滑动窗口）：</div>
+      <div class="sim-ref-string" id="ws-ref-string"></div>
+      <div style="font-size:13px;color:var(--primary);margin-top:12px;font-weight:600">当前工作集：<span id="ws-result">{ }</span></div>
+    </div>
+  </div>
+
+  <div class="section-title">预防抖动的方法</div>
+  <div class="card card-success">
+    <div class="knowledge-list">
+      <li><strong>采用工作集策略</strong>：保证驻留集 ≥ 工作集</li>
+      <li><strong>"L = S"准则</strong>：产生缺页的平均时间(L) = 处理缺页的平均时间(S)时，CPU利用率最高</li>
+      <li><strong>选择合适的驻留集</strong>：利用缺页率反馈，动态调整物理块分配</li>
+      <li><strong>挂起部分进程</strong>：CPU利用率过低时，减少多道程序度</li>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 6: 性能分析 ==================== -->
+<div class="page" id="page-performance">
+  <h2 class="page-title">性能分析</h2>
+  <p class="page-subtitle">缺页率影响因素与有效访问时间计算</p>
+
+  <div class="section-title">影响缺页率的因素</div>
+  <div class="algo-compare">
+    <div class="algo-card">
+      <h4>📐 页面大小</h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">页面增大 → 单页含更多信息 → 缺页率<strong>先降后升</strong>（太小则缺页多，太大则浪费空间）</p>
+    </div>
+    <div class="algo-card">
+      <h4>🧱 物理块数</h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">物理块增多 → 驻留集增大 → 缺页率<strong>下降</strong>（FIFO除外，可能Belady异常）</p>
+    </div>
+    <div class="algo-card">
+      <h4>🔄 置换算法</h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">不同算法对相同引用串产生不同缺页率。OPT最优，LRU次之，FIFO最差</p>
+    </div>
+    <div class="algo-card">
+      <h4>📝 程序局部性</h4>
+      <p style="font-size:13px;color:#64748b;line-height:1.6">局部性越好 → 工作集越小 → 缺页率越低。循环、顺序访问局部性好</p>
+    </div>
+  </div>
+
+  <div class="section-title">有效访问时间（EAT）计算</div>
+  <div class="card card-accent">
+    <h3>基本公式</h3>
+    <div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:8px 0;font-family:'Consolas','Monaco',monospace;font-size:15px">
+      <p><strong>EAT = (1 - p) × ma + p × 缺页处理时间</strong></p>
+    </div>
+    <div class="knowledge-list">
+      <li><strong>p</strong> = 缺页率（0 ≤ p ≤ 1）</li>
+      <li><strong>ma</strong> = 访问内存时间</li>
+      <li>缺页处理时间 = 缺页中断服务时间 + 换入页面时间 + （若需置换）换出页面时间 + 重新执行指令时间</li>
+    </div>
+  </div>
+
+  <div class="card card-warning">
+    <h3>完整公式（含快表TLB）</h3>
+    <div style="background:#f1f5f9;border-radius:8px;padding:16px;margin:8px 0;font-family:'Consolas','Monaco',monospace;font-size:14px;line-height:2">
+      <p>EAT = 命中TLB × (查TLB + 访内存)</p>
+      <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 未命中TLB × (1-p) × (查TLB + 查页表 + 访内存)</p>
+      <p>&nbsp;&;&nbsp;&nbsp;&nbsp;&nbsp;+ 未命中TLB × p × (查TLB + 查页表 + 缺页处理 + 访内存)</p>
+    </div>
+  </div>
+
+  <div class="key-point"><strong>⚠️ 考试注意：</strong>计算EAT时务必<strong>统一时间单位</strong>！1ms = 1,000μs = 1,000,000ns。通常内存访问用ns，缺页处理用ms，需要换算。</div>
+
+  <div class="section-title">EAT 计算器</div>
+  <div class="calc">
+    <div class="calc-row">
+      <div class="calc-field"><label>访问内存时间 ma（ns）</label><input id="eat-ma" type="number" value="200"></div>
+      <div class="calc-field"><label>缺页率 p（%）</label><input id="eat-p" type="number" value="5" step="0.1"></div>
+    </div>
+    <div class="calc-row">
+      <div class="calc-field"><label>缺页中断服务时间（μs）</label><input id="eat-int" type="number" value="10"></div>
+      <div class="calc-field"><label>页面换入时间（ms）</label><input id="eat-swapin" type="number" value="8"></div>
+      <div class="calc-field"><label>页面换出时间（ms）</label><input id="eat-swapout" type="number" value="0" step="0.1"></div>
+    </div>
+    <div style="margin-top:8px;font-size:13px;color:#64748b">* 若不需要换出（有空闲块），换出时间填0</div>
+    <button class="btn btn-primary" onclick="calcEAT()" style="margin-top:12px">计算 EAT</button>
+    <div class="calc-result" id="eat-result" style="display:none">
+      <div class="formula" id="eat-formula"></div>
+      <div class="answer" id="eat-answer"></div>
+    </div>
+  </div>
+
+  <div class="section-title">经典例题</div>
+  <div class="card">
+    <h3>例题：请求分页系统EAT计算</h3>
+    <p style="font-size:14px;line-height:1.8;margin-bottom:12px">某请求分页系统，访问内存时间为200ns，缺页中断服务时间为10μs，从磁盘换入一个页面需8ms，换出一个修改页需15μs，缺页率为5%，其中50%的页面被修改过。求EAT。</p>
+    <details style="margin-top:8px">
+      <summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--primary)">点击查看解答</summary>
+      <div style="padding:12px 0;font-size:14px;line-height:2">
+        <p>缺页处理时间 = 缺页中断服务 + 换入 + 换出</p>
+        <p>= 10μs + 8ms + 50% × 15μs + 50% × 0</p>
+        <p>= 10μs + 8000μs + 7.5μs = <strong>8017.5μs</strong></p>
+        <p>EAT = (1-0.05) × 0.2μs + 0.05 × 8017.5μs</p>
+        <p>= 0.19 + 400.875 = <strong>401.065μs</strong></p>
+      </div>
+    </details>
+  </div>
+
+  <div class="section-title">常考易错点总结</div>
+  <div class="card card-danger">
+    <div class="knowledge-list">
+      <li>FIFO存在<strong>Belady异常</strong>，LRU和OPT不会（它们是栈算法）</li>
+      <li>缺页中断在<strong>指令执行期间</strong>产生，一条指令可能引发<strong>多次</strong>缺页中断</li>
+      <li>改进型CLOCK最多<strong>4轮</strong>扫描一定能找到淘汰页，第1轮和第3轮会将A置0</li>
+      <li>计算EAT时注意<strong>时间单位统一</strong>，1ms = 1000μs = 10⁶ns</li>
+      <li>"可变分配全局置换"缺页时优先从<strong>空闲块</strong>分配，不会立即淘汰本进程页面</li>
+      <li>工作集决定的是<strong>最少</strong>需要多少物理块才不会抖动</li>
+      <li>虚拟内存的核心特征是<strong>多次性</strong>，虚拟性是结果</li>
+      <li>页面置换是在<strong>缺页且无空闲物理块</strong>时才发生，有空间直接调入无需置换</li>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script>
+// ==================== Navigation ====================
+document.querySelectorAll('.nav-link').forEach(link => {
+  link.addEventListener('click', function() {
+    document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+    this.classList.add('active');
+    const page = this.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelector('.sidebar').classList.remove('open');
+  });
+});
+
+// ==================== Page 2: Animations ====================
+function animateFaultFlow() {
+  const steps = document.querySelectorAll('#fault-flow .anim-step');
+  steps.forEach(s => s.classList.remove('highlight', 'miss'));
+  let i = 0;
+  function next() {
+    if (i > 0) { steps[i-1].classList.remove('highlight'); steps[i-1].classList.add(i>=4?'miss':'highlight'); }
+    if (i < steps.length) { steps[i].classList.add('highlight'); i++; setTimeout(next, 600); }
+  }
+  next();
+}
+
+function animateAddrTrans() {
+  const steps = document.querySelectorAll('#addr-trans .addr-trans-step');
+  steps.forEach(s => s.classList.remove('active'));
+  let i = 0;
+  function next() {
+    if (i > 0) steps[i-1].classList.remove('active');
+    if (i < steps.length) { steps[i].classList.add('active'); i++; setTimeout(next, 800); }
+  }
+  next();
+}
+
+// ==================== Simple CLOCK ====================
+let simpleClockData = [];
+let simpleClockPtr = 0;
+
+function drawSimpleClock() {
+  const n = parseInt(document.getElementById('simple-clock-frames').value);
+  simpleClockData = [];
+  simpleClockPtr = 0;
+  const pages = [3,1,5,4,2];
+  for (let i = 0; i < n; i++) {
+    simpleClockData.push({page: i < pages.length ? pages[i] : '?', A: i < pages.length ? (i%2===0?1:0) : 0});
+  }
+  renderSimpleClock();
+}
+
+function renderSimpleClock() {
+  const svg = document.getElementById('simple-clock-svg');
+  const n = simpleClockData.length;
+  const cx = 100, cy = 100, r = 70;
+  let html = '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#e2e8f0" stroke-width="2"/>';
+  for (let i = 0; i < n; i++) {
+    const angle = (2 * Math.PI * i / n) - Math.PI/2;
+    const px = cx + r * Math.cos(angle) - 28;
+    const py = cy + r * Math.sin(angle) - 28;
+    const isPtr = i === simpleClockPtr;
+    const bg = isPtr ? '#fef2f2' : '#fff';
+    const bc = isPtr ? '#ef4444' : '#e2e8f0';
+    html += '<g transform="translate('+px+','+py+')">';
+    html += '<rect width="56" height="56" rx="28" fill="'+bg+'" stroke="'+bc+'" stroke-width="2.5"/>';
+    html += '<text x="28" y="24" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">'+simpleClockData[i].page+'</text>';
+    html += '<text x="28" y="42" text-anchor="middle" font-size="11" fill="#64748b">A='+simpleClockData[i].A+'</text>';
+    html += '</g>';
+    if (isPtr) {
+      html += '<line x1="'+cx+'" y1="'+cy+'" x2="'+(cx+45*Math.cos(angle))+'" y2="'+(cy+45*Math.sin(angle))+'" stroke="#ef4444" stroke-width="2" marker-end="url(#arrRedS)"/>';
+    }
+  }
+  html += '<defs><marker id="arrRedS" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#ef4444"/></marker></defs>';
+  html += '<text x="'+cx+'" y="'+(cy+4)+'" text-anchor="middle" font-size="11" fill="#64748b">指针</text>';
+  svg.innerHTML = html;
+}
+
+function simpleClockStep() {
+  const d = simpleClockData[simpleClockPtr];
+  const log = document.getElementById('simple-clock-log');
+  if (d.A === 0) {
+    log.innerHTML = '✅ 找到 A=0：页面 ' + d.page + '，淘汰！';
+    simpleClockPtr = (simpleClockPtr + 1) % simpleClockData.length;
+  } else {
+    d.A = 0;
+    log.innerHTML = 'A=1：页面 ' + d.page + '，将A置0，跳过（给第二次机会）';
+    simpleClockPtr = (simpleClockPtr + 1) % simpleClockData.length;
+  }
+  renderSimpleClock();
+}
+
+function resetSimpleClock() {
+  drawSimpleClock();
+  document.getElementById('simple-clock-log').innerHTML = '';
+}
+
+drawSimpleClock();
+
+// ==================== Enhanced CLOCK ====================
+// (existing clock code below)
+let clockData = [];
+let clockPointer = 0;
+function drawClock() {
+  const n = parseInt(document.getElementById('clock-frames').value);
+  clockData = [];
+  clockPointer = 0;
+  const pages = [3,1,5,4,2];
+  for (let i = 0; i < n; i++) {
+    clockData.push({page: i < pages.length ? pages[i] : '?', A: i < pages.length ? (i%2===0?1:0) : 0, M: i < pages.length ? (i%3===0?1:0) : 0});
+  }
+  renderClock();
+}
+
+function renderClock() {
+  const svg = document.getElementById('clock-svg');
+  const n = clockData.length;
+  const cx = 100, cy = 100, r = 70;
+  let html = '<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="#e2e8f0" stroke-width="2"/>';
+  for (let i = 0; i < n; i++) {
+    const angle = (2 * Math.PI * i / n) - Math.PI/2;
+    const px = cx + r * Math.cos(angle) - 28;
+    const py = cy + r * Math.sin(angle) - 28;
+    const isPtr = i === clockPointer;
+    const bg = isPtr ? '#fef2f2' : '#fff';
+    const bc = isPtr ? '#ef4444' : '#e2e8f0';
+    html += '<g transform="translate('+px+','+py+')">';
+    html += '<rect width="56" height="56" rx="28" fill="'+bg+'" stroke="'+bc+'" stroke-width="2.5"/>';
+    html += '<text x="28" y="26" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">'+clockData[i].page+'</text>';
+    html += '<text x="28" y="42" text-anchor="middle" font-size="10" fill="#64748b">('+clockData[i].A+','+clockData[i].M+')</text>';
+    html += '</g>';
+    if (isPtr) {
+      const aFromCenter = angle;
+      const ax = cx + 30 * Math.cos(aFromCenter);
+      const ay = cy + 30 * Math.sin(aFromCenter);
+      html += '<line x1="'+cx+'" y1="'+cy+'" x2="'+(cx+45*Math.cos(aFromCenter))+'" y2="'+(cy+45*Math.sin(aFromCenter))+'" stroke="#ef4444" stroke-width="2" marker-end="url(#arrRed)"/>';
+    }
+  }
+  html += '<defs><marker id="arrRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#ef4444"/></marker></defs>';
+  html += '<text x="'+cx+'" y="'+(cy+4)+'" text-anchor="middle" font-size="11" fill="#64748b">指针</text>';
+  svg.innerHTML = html;
+}
+
+function clockStep() {
+  const d = clockData[clockPointer];
+  const log = document.getElementById('clock-log');
+  if (d.A === 0 && d.M === 0) {
+    log.innerHTML = '✅ 找到 (0,0)：页面 ' + d.page + '，淘汰！';
+    clockPointer = (clockPointer + 1) % clockData.length;
+  } else if (d.A === 0 && d.M === 1) {
+    log.innerHTML = '找到 (0,1)：页面 ' + d.page + '，A已为0，继续...';
+    clockPointer = (clockPointer + 1) % clockData.length;
+  } else {
+    d.A = 0;
+    log.innerHTML = '找到 (1,' + d.M + ')：页面 ' + d.page + '，将A置0，跳过';
+    clockPointer = (clockPointer + 1) % clockData.length;
+  }
+  renderClock();
+}
+
+function resetClock() {
+  drawClock();
+  document.getElementById('clock-log').innerHTML = '';
+}
+
+drawClock();
+
+// ==================== Page 3: Page Replacement Simulator ====================
+let simState = null;
+function startSimulation() {
+  const refStr = document.getElementById('sim-ref').value.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+  const frameCount = parseInt(document.getElementById('sim-frames').value);
+  const algo = document.getElementById('sim-algo').value;
+  if (!refStr.length || frameCount < 1) return;
+
+  simState = { refStr, frameCount, algo, step: -1, frames: [], faults: 0, hits: 0, log: [], fifoQueue: [], lruStack: [], frameStates: [] };
+  document.getElementById('sim-step-btn').disabled = false;
+  document.getElementById('sim-auto-btn').disabled = false;
+
+  // Display ref string
+  let refHtml = '';
+  refStr.forEach((p, i) => { refHtml += '<div class="sim-ref-item" id="sim-ref-'+i+'">'+p+'</div>'; });
+  document.getElementById('sim-ref-display').innerHTML = refHtml;
+  document.getElementById('sim-frame-display').innerHTML = '';
+  document.getElementById('sim-faults').textContent = '0';
+  document.getElementById('sim-hits').textContent = '0';
+  document.getElementById('sim-rate').textContent = '0%';
+  document.getElementById('sim-log').innerHTML = '就绪。点击"下一步"逐步执行，或"自动播放"。\n';
+  simState.frameStates = [];
+}
+
+function simNextStep() {
+  if (!simState) return;
+  const s = simState;
+  s.step++;
+  if (s.step >= s.refStr.length) {
+    document.getElementById('sim-log').innerHTML += '\n✅ 模拟完成！';
+    document.getElementById('sim-step-btn').disabled = true;
+    document.getElementById('sim-auto-btn').disabled = true;
+    return;
+  }
+  const page = s.refStr[s.step];
+  const idx = s.frames.indexOf(page);
+  let isHit = idx !== -1;
+  let replacedPage = null;
+  for (let i = 0; i < s.refStr.length; i++) {
+    const el = document.getElementById('sim-ref-' + i);
+    if (el) {
+      el.className = 'sim-ref-item';
+      if (i < s.step) el.classList.add('done');
+      else if (i === s.step) el.classList.add('current');
+    }
+  }
+  if (!isHit) {
+    s.faults++;
+    if (s.frames.length < s.frameCount) {
+      s.frames.push(page);
+      s.fifoQueue.push(page);
+      s.lruStack.push(page);
+      document.getElementById('sim-log').innerHTML += '步骤' + (s.step+1) + ': 访问页' + page + ' → 缺页，装入空闲帧\n';
+    } else {
+      if (s.algo === 'FIFO') {
+        replacedPage = s.fifoQueue.shift();
+        const ri = s.frames.indexOf(replacedPage);
+        s.frames[ri] = page;
+        s.fifoQueue.push(page);
+      } else if (s.algo === 'LRU') {
+        let leastIdx = 0, leastRecent = -1;
+        for (let f = 0; f < s.frames.length; f++) {
+          let lastUsed = -1;
+          for (let k = s.step - 1; k >= 0; k--) {
+            if (s.refStr[k] === s.frames[f]) { lastUsed = k; break; }
+          }
+          if (lastUsed < leastRecent || leastRecent === -1) { leastRecent = lastUsed; leastIdx = f; }
+        }
+        replacedPage = s.frames[leastIdx];
+        s.frames[leastIdx] = page;
+      } else if (s.algo === 'OPT') {
+        let farthestIdx = 0, farthestDist = -1;
+        for (let f = 0; f < s.frames.length; f++) {
+          let nextUse = Infinity;
+          for (let k = s.step + 1; k < s.refStr.length; k++) {
+            if (s.refStr[k] === s.frames[f]) { nextUse = k; break; }
+          }
+          if (nextUse > farthestDist) { farthestDist = nextUse; farthestIdx = f; }
+        }
+        replacedPage = s.frames[farthestIdx];
+        s.frames[farthestIdx] = page;
+      }
+      document.getElementById('sim-log').innerHTML += '步骤' + (s.step+1) + ': 访问页' + page + ' → 缺页，淘汰页' + replacedPage + '\n';
+    }
+  } else {
+    s.hits++;
+    document.getElementById('sim-log').innerHTML += '步骤' + (s.step+1) + ': 访问页' + page + ' → 命中\n';
+  }
+  const curRef = document.getElementById('sim-ref-' + s.step);
+  if (curRef) curRef.className = 'sim-ref-item ' + (isHit ? 'hit' : 'miss');
+  let fHtml = '';
+  for (let f = 0; f < s.frameCount; f++) {
+    const pg = f < s.frames.length ? s.frames[f] : '';
+    let cls = 'sim-frame';
+    if (!isHit && pg === page) cls += ' new';
+    else if (pg) cls += ' filled';
+    fHtml += '<div class="' + cls + '">' + pg + '</div>';
+  }
+  document.getElementById('sim-frame-display').innerHTML = fHtml;
+  document.getElementById('sim-faults').textContent = s.faults;
+  document.getElementById('sim-hits').textContent = s.hits;
+  document.getElementById('sim-rate').textContent = (s.faults / (s.step + 1) * 100).toFixed(1) + '%';
+}
+
+let simAutoInterval = null;
+function simAutoPlay() {
+  if (simAutoInterval) { clearInterval(simAutoInterval); simAutoInterval = null; return; }
+  simAutoInterval = setInterval(() => {
+    simNextStep();
+    if (simState && simState.step >= simState.refStr.length - 1) { clearInterval(simAutoInterval); simAutoInterval = null; }
+  }, 500);
+}
+
+// ==================== Page 5: Working Set Animation ====================
+const wsRefStr = [1,2,3,2,4,1,5,3,2,1,4,5];
+let wsPos = 0;
+let wsInterval = null;
+
+function initWorkingSet() {
+  const container = document.getElementById('ws-ref-string');
+  let html = '';
+  wsRefStr.forEach((p, i) => {
+    html += '<div class="sim-ref-item" id="ws-ref-' + i + '">' + p + '</div>';
+  });
+  container.innerHTML = html;
+  updateWorkingSet();
+}
+
+function updateWorkingSet() {
+  const delta = parseInt(document.getElementById('ws-delta').value);
+  document.getElementById('ws-delta-val').textContent = delta;
+  const start = Math.max(0, wsPos - delta + 1);
+  const end = wsPos;
+  const workingSet = new Set();
+  for (let i = 0; i < wsRefStr.length; i++) {
+    const el = document.getElementById('ws-ref-' + i);
+    if (!el) continue;
+    el.className = 'sim-ref-item';
+    if (i >= start && i <= end) {
+      el.style.background = '#eef2ff';
+      el.style.borderColor = '#818cf8';
+      workingSet.add(wsRefStr[i]);
+    }
+    if (i === wsPos) {
+      el.style.background = '#4f46e5';
+      el.style.color = '#fff';
+      el.style.borderColor = '#4f46e5';
+    }
+  }
+  document.getElementById('ws-result').textContent = '{ ' + [...workingSet].sort().join(', ') + ' }  |大小=' + workingSet.size;
+}
+
+function wsAnimate() {
+  if (wsInterval) { clearInterval(wsInterval); wsInterval = null; return; }
+  wsPos = 0;
+  wsInterval = setInterval(() => {
+    updateWorkingSet();
+    wsPos++;
+    if (wsPos >= wsRefStr.length) {
+      clearInterval(wsInterval);
+      wsInterval = null;
+    }
+  }, 600);
+}
+
+initWorkingSet();
+
+// ==================== Page 6: EAT Calculator ====================
+function calcEAT() {
+  const ma = parseFloat(document.getElementById('eat-ma').value);
+  const pPercent = parseFloat(document.getElementById('eat-p').value);
+  const intTime = parseFloat(document.getElementById('eat-int').value);
+  const swapin = parseFloat(document.getElementById('eat-swapin').value);
+  const swapout = parseFloat(document.getElementById('eat-swapout').value);
+  const p = pPercent / 100;
+  const maUs = ma / 1000;
+  const swapinUs = swapin * 1000;
+  const swapoutUs = swapout * 1000;
+  const pageFaultTime = intTime + swapinUs + swapoutUs;
+  const eat = (1 - p) * maUs + p * pageFaultTime;
+  const result = document.getElementById('eat-result');
+  result.style.display = 'block';
+  document.getElementById('eat-formula').textContent =
+    'EAT = (1 - ' + p.toFixed(3) + ') × ' + maUs.toFixed(3) + 'μs + ' + p.toFixed(3) + ' × ' + pageFaultTime.toFixed(1) + 'μs';
+  document.getElementById('eat-answer').textContent = eat.toFixed(3) + ' μs';
+}
+</script>
+</body>

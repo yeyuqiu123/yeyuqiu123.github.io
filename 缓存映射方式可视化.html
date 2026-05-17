@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cache 映射方式可视化</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+:root{
+  --bg:#070b12;--bg2:#0c1220;--card:#111827;--card2:#162032;
+  --border:#1c2b44;--fg:#e2e8f0;--fg-dim:#94a3b8;--fg-muted:#4b5e78;
+  --accent:#f59e0b;--accent-dim:rgba(245,158,11,.12);
+  --tag-c:#fb923c;--tag-bg:rgba(251,146,60,.10);
+  --idx-c:#60a5fa;--idx-bg:rgba(96,165,250,.10);
+  --off-c:#4ade80;--off-bg:rgba(74,222,128,.10);
+  --hit:#22c55e;--hit-bg:rgba(34,197,94,.10);
+  --miss:#ef4444;--miss-bg:rgba(239,68,68,.10);
+  --radius:12px;--radius-sm:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Noto Sans SC',sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;line-height:1.6;overflow-x:hidden}
+
+/* 背景 */
+.bg-orb{position:fixed;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:0}
+.bg-orb.a{width:380px;height:380px;background:rgba(245,158,11,.06);top:-6%;left:-4%;animation:oF 20s ease-in-out infinite alternate}
+.bg-orb.b{width:300px;height:300px;background:rgba(96,165,250,.05);bottom:-4%;right:-3%;animation:oF 18s ease-in-out infinite alternate-reverse}
+@keyframes oF{0%{transform:translate(0,0) scale(1)}100%{transform:translate(30px,-20px) scale(1.1)}}
+
+.app{position:relative;z-index:1;max-width:1600px;margin:0 auto;padding:24px 24px 60px}
+
+/* 头部 */
+header{text-align:center;margin-bottom:26px}
+header h1{font-size:clamp(30px,4vw,42px);font-weight:900;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),#fbbf24 40%,var(--fg));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+header p{color:var(--fg-muted);font-size:15px;margin-top:4px}
+.mapping-tabs{display:flex;justify-content:center;gap:8px;margin-top:18px;flex-wrap:wrap}
+.mapping-tabs button{padding:10px 24px;border-radius:999px;border:1.5px solid var(--border);background:0;color:var(--fg-dim);font-size:15px;font-weight:600;cursor:pointer;transition:all .25s;font-family:inherit}
+.mapping-tabs button:hover{border-color:var(--accent);color:var(--fg)}
+.mapping-tabs button.active{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);box-shadow:0 0 14px rgba(245,158,11,.13)}
+
+/* 控制栏 */
+.bar{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;justify-content:center;padding:14px 24px;margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius)}
+.cg{display:flex;align-items:center;gap:8px;font-size:14px}
+.cg label{color:var(--fg-muted);white-space:nowrap;font-weight:600}
+.cg select,.cg input[type=number]{padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg2);color:var(--fg);font-size:14px;font-family:'JetBrains Mono',monospace;min-width:68px;outline:0;transition:border-color .2s}
+.cg select:focus,.cg input:focus{border-color:var(--accent)}
+.cg select option{background:var(--bg2);color:var(--fg)}
+.btn{padding:8px 18px;border-radius:var(--radius-sm);border:none;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;font-family:inherit}
+.btn-a{background:var(--accent);color:#000}.btn-a:hover{background:#d97706}
+.btn-o{background:0;border:1.5px solid var(--border);color:var(--fg-dim)}.btn-o:hover{border-color:var(--fg-dim);color:var(--fg)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+
+/* ===== 地址分解 ===== */
+.decompose{padding:22px 28px;margin-bottom:20px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);min-height:80px}
+.dec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.dec-head .dl{font-size:14px;color:var(--fg-muted);font-weight:600;display:flex;align-items:center;gap:5px}
+.dec-head .dl i{color:var(--accent);font-size:13px}
+.dec-addr{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:var(--fg)}
+.dec-hex{font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--fg-dim)}
+.dec-bin{font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--fg-dim)}
+
+/* 位段展示 */
+.bit-segs{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:16px}
+.bit-seg{display:flex;flex-direction:column;align-items:center;padding:14px 24px 10px;border-radius:12px;min-width:100px;transition:all .3s}
+.bit-seg .seg-bits{font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:700;letter-spacing:5px;line-height:1.1}
+.bit-seg .seg-name{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin-top:6px}
+.bit-seg .seg-meta{font-size:13px;color:var(--fg-muted);margin-top:3px}
+.bit-seg.tag-s{background:var(--tag-bg);border:1.5px solid rgba(251,146,60,.3);color:var(--tag-c)}
+.bit-seg.idx-s{background:var(--idx-bg);border:1.5px solid rgba(96,165,250,.3);color:var(--idx-c)}
+.bit-seg.off-s{background:var(--off-bg);border:1.5px solid rgba(74,222,128,.3);color:var(--off-c)}
+
+/* 详细卡片 */
+.detail-cards{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
+.d-card{padding:12px 20px;border-radius:10px;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:110px;border-left:3px solid}
+.d-card.tag-d{background:var(--tag-bg);border-left-color:var(--tag-c)}
+.d-card.idx-d{background:var(--idx-bg);border-left-color:var(--idx-c)}
+.d-card.off-d{background:var(--off-bg);border-left-color:var(--off-c)}
+.d-card .dc-name{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.d-card.tag-d .dc-name{color:var(--tag-c)}
+.d-card.idx-d .dc-name{color:var(--idx-c)}
+.d-card.off-d .dc-name{color:var(--off-c)}
+.d-card .dc-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700}
+.d-card .dc-info{font-size:12px;color:var(--fg-muted)}
+
+/* 公式 */
+.formula{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--fg-dim);text-align:center;line-height:1.8;padding:10px 0 0;border-top:1px solid var(--border)}
+.formula .ht{color:var(--tag-c);font-weight:700}
+.formula .hi{color:var(--idx-c);font-weight:700}
+.formula .ho{color:var(--off-c);font-weight:700}
+
+/* 图例 */
+.legend{display:flex;flex-wrap:wrap;gap:18px;justify-content:center;padding:8px 0 14px;font-size:13px}
+.legend-i{display:flex;align-items:center;gap:5px;color:var(--fg-muted)}
+.legend-d{width:12px;height:12px;border-radius:3px}
+
+/* ===== 主区域 ===== */
+.main-area{display:flex;gap:18px;margin-bottom:20px;align-items:flex-start}
+@media(max-width:900px){.main-area{flex-direction:column}}
+
+.panel{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;flex-shrink:0}
+.p-head{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+.p-head i{font-size:14px}
+.p-head .sub{font-weight:400;color:var(--fg-muted);font-size:13px;margin-left:auto}
+.p-body{padding:14px;overflow-y:auto;max-height:520px}
+.p-body::-webkit-scrollbar{width:5px}
+.p-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* Cache面板 */
+.cache-panel{width:340px;flex-shrink:0}
+.cache-tbl{width:100%;border-collapse:collapse;font-size:13px;font-family:'JetBrains Mono',monospace}
+.cache-tbl th{padding:9px 6px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg-muted);border-bottom:1.5px solid var(--border);background:rgba(255,255,255,.02);text-align:center;white-space:nowrap}
+.cache-tbl td{padding:9px 6px;border-bottom:1px solid rgba(255,255,255,.03);text-align:center;vertical-align:middle;transition:all .3s}
+.cache-tbl tr:hover td{background:rgba(255,255,255,.02)}
+.cache-tbl .c-set{color:var(--idx-c);font-weight:700;font-size:14px;border-right:2px solid var(--idx-bg)}
+.cache-tbl .c-line{color:var(--fg-muted);font-weight:600}
+.cache-tbl .c-valid{font-weight:700}
+.cache-tbl .c-tag{color:var(--tag-c);font-weight:700}
+.cache-tbl .c-data{color:var(--off-c)}
+.vy{color:var(--hit)}.vn{color:var(--fg-muted)}
+
+.cl-hit{animation:hitF .6s ease}
+@keyframes hitF{0%{background:rgba(34,197,94,.28)}100%{background:0}}
+.cl-miss{animation:missF .6s ease}
+@keyframes missF{0%{background:rgba(239,68,68,.28)}100%{background:0}}
+.cl-load{animation:loadF .8s ease}
+@keyframes loadF{0%{background:rgba(245,158,11,.28)}100%{background:0}}
+.cl-search{animation:searchF .4s ease}
+@keyframes searchF{0%{background:rgba(96,165,250,.2)}100%{background:0}}
+
+/* 映射箭头列 */
+.map-col{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-width:52px;padding:40px 0;flex-shrink:0}
+.map-arr{font-size:28px;color:var(--fg-muted);transition:all .4s}
+.map-arr.act{color:var(--accent);text-shadow:0 0 16px var(--accent)}
+.map-lbl{font-size:12px;color:var(--fg-muted);text-align:center;font-weight:600;writing-mode:vertical-rl;letter-spacing:2px;transition:color .3s}
+
+/* 主存面板 */
+.mem-panel{flex:1;min-width:0}
+.mem-grid{display:grid;gap:4px;justify-content:start}
+.mem-cell{
+  width:46px;height:42px;border-radius:6px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;
+  font-size:12px;font-weight:600;cursor:pointer;transition:all .25s;
+  border:1.5px solid transparent;position:relative;
+}
+.mem-cell:hover{transform:scale(1.08);z-index:2;border-color:rgba(255,255,255,.2)}
+.mem-cell .mc-addr{font-size:11px;line-height:1;opacity:.8}
+.mem-cell.in-cache{border-color:rgba(34,197,94,.35)}
+.mem-cell.in-cache::after{content:'';position:absolute;top:2px;right:2px;width:6px;height:6px;border-radius:50%;background:var(--hit);box-shadow:0 0 4px var(--hit)}
+.mem-cell.active-cell{border-color:var(--accent)!important;box-shadow:0 0 12px rgba(245,158,11,.4);animation:pulseC 1s ease-in-out 2;z-index:3}
+@keyframes pulseC{0%,100%{box-shadow:0 0 12px rgba(245,158,11,.3)}50%{box-shadow:0 0 20px rgba(245,158,11,.5)}}
+.mem-cell.block-start{border-left:2px solid rgba(255,255,255,.12)}
+
+/* 行地址标签 */
+.mem-row-label{display:flex;align-items:center;gap:4px;margin-bottom:4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--fg-muted);padding-left:2px}
+
+/* 飞行块 */
+.flyer{position:fixed;width:32px;height:32px;border-radius:8px;z-index:999;pointer-events:none;background:var(--accent);box-shadow:0 0 18px rgba(245,158,11,.5),0 0 36px rgba(245,158,11,.2);transition:all .5s cubic-bezier(.22,1,.36,1)}
+.flyer::after{content:'';position:absolute;inset:-3px;border-radius:9px;border:2px solid var(--accent);opacity:.4;animation:fp .4s ease-in-out infinite alternate}
+@keyframes fp{0%{transform:scale(1);opacity:.4}100%{transform:scale(1.25);opacity:0}}
+
+/* 底部 */
+.bottom{display:grid;grid-template-columns:300px 1fr;gap:18px}
+@media(max-width:768px){.bottom{grid-template-columns:1fr}}
+.stats-p{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px}
+.stats-p h3{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.stats-p h3 i{color:var(--accent);font-size:14px}
+.sr{display:flex;justify-content:space-between;padding:6px 0;font-size:14px;border-bottom:1px solid rgba(255,255,255,.03)}
+.sr:last-child{border:0}.sr .sl{color:var(--fg-muted)}.sr .sv{font-family:'JetBrains Mono',monospace;font-weight:700}
+.sv.hr{color:var(--hit)}.sv.mr{color:var(--miss)}
+.hbar{height:6px;border-radius:3px;background:var(--bg2);margin-top:10px;overflow:hidden}
+.hbar-in{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--hit),var(--accent));transition:width .5s}
+.ps{margin-top:14px;font-size:13px;color:var(--fg-muted);line-height:1.6}
+
+.log-p{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);display:flex;flex-direction:column;max-height:260px}
+.log-p h3{padding:12px 18px;font-size:15px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px;flex-shrink:0}
+.log-p h3 i{color:var(--accent);font-size:14px}
+.log-b{padding:10px 14px;overflow-y:auto;flex:1;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.7}
+.log-b::-webkit-scrollbar{width:4px}.log-b::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.le{padding:3px 0;border-bottom:1px solid rgba(255,255,255,.02)}
+.le .lh{color:var(--hit);font-weight:700}.le .lm{color:var(--miss);font-weight:700}.le .lr{color:var(--accent);font-weight:700}
+
+/* toast */
+.toast{position:fixed;top:16px;right:16px;z-index:1000;padding:12px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;pointer-events:none;transform:translateX(120%);transition:transform .35s cubic-bezier(.22,1,.36,1);box-shadow:0 6px 24px rgba(0,0,0,.4)}
+.toast.show{transform:translateX(0)}
+.toast.ht{background:var(--hit);color:#000}.toast.mt{background:var(--miss);color:#fff}
+
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="bg-orb a"></div><div class="bg-orb b"></div>
+<div class="toast" id="toast"></div>
+<div class="app">
+
+<header>
+  <h1>Cache 映射方式可视化</h1>
+  <p>直接映射 / 全相联映射 / 组相联映射 — 实时动画演示地址映射全过程</p>
+  <div class="mapping-tabs" id="mtabs">
+    <button data-t="direct" class="active"><i class="fas fa-arrow-right" style="margin-right:3px"></i>直接映射</button>
+    <button data-t="fully"><i class="fas fa-arrows-alt" style="margin-right:3px"></i>全相联映射</button>
+    <button data-t="set"><i class="fas fa-th-large" style="margin-right:3px"></i>组相联映射</button>
+  </div>
+</header>
+
+<!-- 参数 -->
+<div class="bar">
+  <div class="cg"><label><i class="fas fa-memory" style="color:var(--idx-c)"></i> 内存</label>
+    <select id="sMem"><option value="16">16 B</option><option value="32">32 B</option><option value="64" selected>64 B</option></select></div>
+  <div class="cg"><label><i class="fas fa-cube" style="color:var(--off-c)"></i> 块大小</label>
+    <select id="sBlk"><option value="4">4 B</option><option value="8">8 B</option><option value="16" selected>16 B</option></select></div>
+  <div class="cg"><label><i class="fas fa-database" style="color:var(--tag-c)"></i> Cache行</label>
+    <select id="sCln"><option value="2">2</option><option value="4" selected>4</option><option value="8">8</option></select></div>
+  <div class="cg" id="gWay" style="display:none"><label><i class="fas fa-layer-group" style="color:var(--accent)"></i> 路数</label>
+    <select id="sWay"><option value="2">2路</option><option value="4">4路</option></select></div>
+  <div class="cg"><label>编址</label>
+    <select id="sAdr"><option value="byte" selected>按字节</option><option value="word">按字(字=块)</option></select></div>
+</div>
+
+<!-- 访问 -->
+<div class="bar">
+  <div class="cg"><label><i class="fas fa-crosshairs" style="color:var(--accent)"></i> 地址</label>
+    <input type="number" id="iAddr" min="0" placeholder="十进制" style="width:80px" aria-label="地址"></div>
+  <button class="btn btn-a" id="bAcc" onclick="doAccess()"><i class="fas fa-play" style="margin-right:3px"></i>访问</button>
+  <button class="btn btn-o" onclick="doRand()"><i class="fas fa-dice" style="margin-right:3px"></i>随机</button>
+  <button class="btn btn-o" onclick="doSeq()"><i class="fas fa-list-ol" style="margin-right:3px"></i>顺序</button>
+  <button class="btn btn-o" onclick="doReset()"><i class="fas fa-rotate-right" style="margin-right:3px"></i>重置</button>
+</div>
+
+<!-- 地址分解 -->
+<div class="decompose" id="dec">
+  <div class="dec-head">
+    <span class="dl"><i class="fas fa-scissors"></i> 地址分解</span>
+  </div>
+  <div id="decContent" style="display:flex;align-items:center;justify-content:center;min-height:50px;color:var(--fg-muted);font-size:13px">
+    输入地址后查看分解结果
+  </div>
+</div>
+
+<!-- 图例 -->
+<div class="legend">
+  <div class="legend-i"><div class="legend-d" style="background:var(--tag-c)"></div>Tag 标记</div>
+  <div class="legend-i"><div class="legend-d" style="background:var(--idx-c)"></div>Index 索引</div>
+  <div class="legend-i"><div class="legend-d" style="background:var(--off-c)"></div>Offset 偏移</div>
+  <div class="legend-i"><div class="legend-d" style="background:var(--hit)"></div>已缓存</div>
+  <div class="legend-i"><div class="legend-d" style="background:var(--accent)"></div>当前访问</div>
+</div>
+
+<!-- 主区域：Cache(左) + 箭头 + 主存(右) -->
+<div class="main-area">
+  <div class="panel cache-panel">
+    <div class="p-head"><i class="fas fa-database" style="color:var(--tag-c)"></i> Cache<span class="sub" id="cInfo"></span></div>
+    <div class="p-body" id="cBody"></div>
+  </div>
+  <div class="map-col">
+    <div class="map-arr" id="mArr"><i class="fas fa-angles-left"></i></div>
+    <div class="map-lbl" id="mLbl">映射</div>
+  </div>
+  <div class="panel mem-panel">
+    <div class="p-head"><i class="fas fa-memory" style="color:var(--idx-c)"></i> 主存<span class="sub" id="mInfo"></span></div>
+    <div class="p-body" id="mBody"></div>
+  </div>
+</div>
+
+<!-- 底部 -->
+<div class="bottom">
+  <div class="stats-p">
+    <h3><i class="fas fa-chart-pie"></i> 统计</h3>
+    <div class="sr"><span class="sl">总访问</span><span class="sv" id="sT">0</span></div>
+    <div class="sr"><span class="sl">命中</span><span class="sv hr" id="sH">0</span></div>
+    <div class="sr"><span class="sl">缺失</span><span class="sv mr" id="sM">0</span></div>
+    <div class="sr"><span class="sl">命中率</span><span class="sv hr" id="sHR">0.0%</span></div>
+    <div class="sr"><span class="sl">缺失率</span><span class="sv mr" id="sMR">100.0%</span></div>
+    <div class="hbar"><div class="hbar-in" id="hBar" style="width:0%"></div></div>
+    <div class="ps" id="pSum"></div>
+  </div>
+  <div class="log-p">
+    <h3><i class="fas fa-scroll"></i> 操作日志</h3>
+    <div class="log-b" id="lBody"><div style="color:var(--fg-muted);font-style:italic">等待操作...</div></div>
+  </div>
+</div>
+</div>
+
+<script>
+/* ===== 全局状态 ===== */
+const S={
+  mem:64,blk:16,cln:4,type:'direct',ways:2,amode:'byte',
+  blockCount:0,addrBits:0,offBits:0,idxBits:0,tagBits:0,numSets:0,
+  cache:[],stats:{t:0,h:0,m:0},logs:[],palette:[],
+  anim:false,curAddr:-1
+};
+
+/* ===== 计算 ===== */
+function compute(){
+  const unit=S.amode==='byte'?1:S.blk;
+  const totalUnits=S.mem/unit;
+  S.blockCount=S.mem/S.blk;
+  S.addrBits=Math.max(1,Math.ceil(Math.log2(Math.max(1,totalUnits))));
+  S.offBits=S.amode==='byte'?Math.max(0,Math.log2(S.blk)):0;
+  if(S.type==='direct'){S.numSets=S.cln;S.idxBits=Math.max(0,Math.log2(Math.max(1,S.cln)))}
+  else if(S.type==='fully'){S.numSets=1;S.idxBits=0}
+  else{S.numSets=S.cln/S.ways;S.idxBits=Math.max(0,Math.log2(Math.max(1,S.numSets)))}
+  S.tagBits=Math.max(0,S.addrBits-S.idxBits-S.offBits);
+  // 调色板
+  S.palette=[];
+  for(let i=0;i<S.blockCount;i++){
+    const h=(i*137.508)%360;
+    S.palette.push({bg:`hsl(${h},28%,14%)`,bgIc:`hsl(${h},38%,24%)`,tx:`hsl(${h},25%,65%)`});
+  }
+}
+
+function initCache(){S.cache=[];for(let i=0;i<S.cln;i++)S.cache.push({v:false,tag:0,bn:-1,lu:0})}
+function resetAll(){S.stats={t:0,h:0,m:0};S.logs=[];S.curAddr=-1;initCache();compute();render()}
+
+/* ===== 地址分解 ===== */
+function decompose(a){
+  const bn=Math.floor(a/S.blk);
+  const off=S.amode==='byte'?a%S.blk:0;
+  let idx,tag;
+  if(S.type==='direct'){idx=bn%S.cln;tag=Math.floor(bn/S.cln)}
+  else if(S.type==='fully'){idx=null;tag=bn}
+  else{idx=bn%S.numSets;tag=Math.floor(bn/S.numSets)}
+  return{a,bn,off,idx,tag}
+}
+
+/* ===== Cache操作 ===== */
+function lookup(d){
+  const{idx,tag}=d;
+  if(S.type==='direct'){
+    const l=S.cache[idx];
+    if(l.v&&l.tag===tag){l.lu=Date.now();return{hit:true,li:idx}}
+    return{hit:false,li:idx}
+  }else if(S.type==='fully'){
+    for(let i=0;i<S.cln;i++)if(S.cache[i].v&&S.cache[i].tag===tag){S.cache[i].lu=Date.now();return{hit:true,li:i}}
+    return{hit:false,li:-1}
+  }else{
+    const ss=idx*S.ways;
+    for(let i=0;i<S.ways;i++){const l=S.cache[ss+i];if(l.v&&l.tag===tag){l.lu=Date.now();return{hit:true,li:ss+i}}}
+    return{hit:false,li:-1,si:idx}
+  }
+}
+
+function replace(d){
+  const{idx,tag,bn}=d;
+  if(S.type==='direct'){
+    const l=S.cache[idx];const rp=l.v?{bn:l.bn,li:idx}:null;
+    l.v=true;l.tag=tag;l.bn=bn;l.lu=Date.now();return{li:idx,rp}
+  }else if(S.type==='fully'){
+    let mi=Infinity,ii=0;
+    for(let i=0;i<S.cln;i++){if(!S.cache[i].v){ii=i;break}if(S.cache[i].lu<mi){mi=S.cache[i].lu;ii=i}}
+    const l=S.cache[ii];const rp=l.v?{bn:l.bn,li:ii}:null;
+    l.v=true;l.tag=tag;l.bn=bn;l.lu=Date.now();return{li:ii,rp}
+  }else{
+    const ss=idx*S.ways;let mi=Infinity,ii=ss;
+    for(let i=0;i<S.ways;i++){const l=S.cache[ss+i];if(!l.v){ii=ss+i;break}if(l.lu<mi){mi=l.lu;ii=ss+i}}
+    const l=S.cache[ii];const rp=l.v?{bn:l.bn,li:ii}:null;
+    l.v=true;l.tag=tag;l.bn=bn;l.lu=Date.now();return{li:ii,rp}
+  }
+}
+
+/* ===== 渲染 ===== */
+function render(){renderMemInfo();renderMemory();renderCache();renderStats();renderPSum()}
+
+function renderMemInfo(){
+  const u=S.amode==='byte'?'B':'W';
+  document.getElementById('mInfo').textContent=`${S.mem}${u} / ${S.blk}${u}块 = ${S.blockCount}块 | ${S.addrBits}位地址`;
+  document.getElementById('cInfo').textContent=`${S.cln}行 × ${S.blk}${u} = ${S.cln*S.blk}${u}`;
+}
+
+function renderMemory(){
+  const body=document.getElementById('mBody');
+  if(S.amode==='byte'){
+    // 字节网格：16列 × N行
+    const cols=16;
+    const rows=Math.ceil(S.mem/cols);
+    let html='';
+    // 块在cache中的集合
+    const inCacheBlocks=new Set();
+    S.cache.forEach(l=>{if(l.v)inCacheBlocks.add(l.bn)});
+    for(let r=0;r<rows;r++){
+      html+=`<div class="mem-row-label">${r*cols}</div>`;
+      html+=`<div class="mem-grid" style="grid-template-columns:repeat(${cols},38px);margin-bottom:6px">`;
+      for(let c=0;c<cols;c++){
+        const addr=r*cols+c;
+        if(addr>=S.mem)break;
+        const bn=Math.floor(addr/S.blk);
+        const ic=inCacheBlocks.has(bn);
+        const p=S.palette[bn];
+        const isStart=addr%S.blk===0;
+        const isAct=addr===S.curAddr;
+        let cls='mem-cell';
+        if(ic)cls+=' in-cache';
+        if(isAct)cls+=' active-cell';
+        if(isStart)cls+=' block-start';
+        const bg=ic?p.bgIc:p.bg;
+        const tx=p.tx;
+        html+=`<div class="${cls}" data-addr="${addr}" style="background:${bg};color:${tx}" onclick="clkAddr(${addr})" title="地址 ${addr} (块${bn})"><span class="mc-addr">${addr}</span></div>`;
+      }
+      html+='</div>';
+    }
+    body.innerHTML=html;
+  }else{
+    // 按字编址：每格一个块/字
+    const cols=Math.min(8,S.blockCount);
+    const rows=Math.ceil(S.blockCount/cols);
+    const inCacheBlocks=new Set();
+    S.cache.forEach(l=>{if(l.v)inCacheBlocks.add(l.bn)});
+    let html='';
+    for(let r=0;r<rows;r++){
+      html+=`<div class="mem-row-label">块${r*cols}</div>`;
+      html+=`<div class="mem-grid" style="grid-template-columns:repeat(${cols},52px);margin-bottom:6px">`;
+      for(let c=0;c<cols;c++){
+        const bn=r*cols+c;
+        if(bn>=S.blockCount)break;
+        const ic=inCacheBlocks.has(bn);
+        const p=S.palette[bn];
+        const isAct=bn===S.curAddr;
+        let cls='mem-cell';
+        if(ic)cls+=' in-cache';
+        if(isAct)cls+=' active-cell';
+        const bg=ic?p.bgIc:p.bg;
+        html+=`<div class="${cls}" data-addr="${bn}" style="background:${bg};color:${p.tx};width:52px;height:40px" onclick="clkAddr(${bn})" title="块${bn}"><span class="mc-addr" style="font-size:11px">块${bn}</span></div>`;
+      }
+      html+='</div>';
+    }
+    body.innerHTML=html;
+  }
+}
+
+function renderCache(){
+  const body=document.getElementById('cBody');
+  let html='<table class="cache-tbl"><thead><tr>';
+  if(S.type==='set'){html+='<th>组</th><th>行</th>'}
+  else if(S.type==='direct'){html+='<th>行号</th>'}
+  else{html+='<th>行号</th>'}
+  html+='<th>V</th><th>Tag</th><th>数据</th>';
+  if(S.type!=='direct')html+='<th>LRU</th>';
+  html+='</tr></thead><tbody>';
+  for(let i=0;i<S.cln;i++){
+    const l=S.cache[i];
+    html+=`<tr data-line="${i}">`;
+    if(S.type==='set'){
+      const setN=Math.floor(i/S.ways);
+      const wayN=i%S.ways;
+      if(wayN===0)html+=`<td class="c-set" rowspan="${S.ways}" style="border-right:2px solid var(--idx-bg)">组${setN}</td>`;
+      html+=`<td class="c-line">${i}</td>`;
+    }else if(S.type==='direct'){
+      html+=`<td class="c-set">${i}</td>`;
+    }else{
+      html+=`<td class="c-line">${i}</td>`;
+    }
+    html+=`<td class="c-valid">${l.v?'<span class="vy">1</span>':'<span class="vn">0</span>'}</td>`;
+    html+=`<td class="c-tag">${l.v?l.tag:'-'}</td>`;
+    html+=`<td class="c-data">${l.v?'块'+l.bn:'-'}</td>`;
+    if(S.type!=='direct'){
+      // LRU标记：最近使用的显示时钟图标
+      let isMRU=false;
+      if(S.type==='fully'){
+        const mx=Math.max(...S.cache.filter(x=>x.v).map(x=>x.lu),0);
+        isMRU=l.v&&l.lu===mx&&mx>0;
+      }else{
+        const ss=Math.floor(i/S.ways)*S.ways;
+        const setLines=S.cache.slice(ss,ss+S.ways);
+        const mx=Math.max(...setLines.filter(x=>x.v).map(x=>x.lu),0);
+        isMRU=l.v&&l.lu===mx&&mx>0;
+      }
+      html+=`<td>${isMRU?'<i class="fas fa-clock" style="color:var(--accent);font-size:9px" title="最近使用"></i>':''}</td>`;
+    }
+    html+='</tr>';
+  }
+  html+='</tbody></table>';
+  body.innerHTML=html;
+}
+
+function renderStats(){
+  const{t,h,m}=S.stats;
+  document.getElementById('sT').textContent=t;
+  document.getElementById('sH').textContent=h;
+  document.getElementById('sM').textContent=m;
+  const hr=t>0?(h/t*100):0;
+  const mr=t>0?(m/t*100):100;
+  document.getElementById('sHR').textContent=hr.toFixed(1)+'%';
+  document.getElementById('sMR').textContent=mr.toFixed(1)+'%';
+  document.getElementById('hBar').style.width=hr+'%';
+}
+
+function renderPSum(){
+  const u=S.amode==='byte'?'字节':'字';
+  const mn=S.type==='direct'?'直接映射':S.type==='fully'?'全相联映射':`${S.ways}路组相联`;
+  let t=`<b>映射:</b> ${mn}<br>`;
+  t+=`<b>地址:</b> ${S.addrBits}位 = Tag${S.tagBits}位 + Index${S.idxBits}位 + Offset${S.offBits}位<br>`;
+  if(S.type==='set')t+=`<b>组数:</b> ${S.numSets} | 每组${S.ways}行<br>`;
+  t+=`<b>编址:</b> 按${u}`;
+  document.getElementById('pSum').innerHTML=t;
+}
+
+/* ===== 地址分解渲染 ===== */
+function renderDecompose(addr){
+  const d=decompose(addr);
+  const total=S.addrBits;
+  const bin=addr.toString(2).padStart(total,'0');
+
+  // 分离各段二进制
+  let tagBin='',idxBin='',offBin='';
+  let pos=0;
+  // 地址布局：高位→低位 = Tag | Index | Offset
+  tagBin=bin.substring(0,S.tagBits);
+  idxBin=bin.substring(S.tagBits,S.tagBits+S.idxBits);
+  offBin=bin.substring(S.tagBits+S.idxBits);
+
+  let html='';
+
+  // 地址显示
+  html+=`<div class="dec-head">
+    <span class="dl"><i class="fas fa-scissors"></i> 地址分解</span>
+    <span class="dec-addr">${addr}</span>
+    <span class="dec-hex">(0x${addr.toString(16).toUpperCase()})</span>
+    <span class="dec-bin">= ${bin}₂</span>
+  </div>`;
+
+  // 位段大色块
+  html+=`<div class="bit-segs">`;
+  if(S.tagBits>0){
+    html+=`<div class="bit-seg tag-s">
+      <div class="seg-bits">${tagBin||'-'}</div>
+      <div class="seg-name">Tag 标记</div>
+      <div class="seg-meta">${S.tagBits}位 = 十进制 ${d.tag}</div>
+    </div>`;
+  }
+  if(S.idxBits>0){
+    html+=`<div class="bit-seg idx-s">
+      <div class="seg-bits">${idxBin||'-'}</div>
+      <div class="seg-name">Index 索引</div>
+      <div class="seg-meta">${S.idxBits}位 = 十进制 ${d.idx}</div>
+    </div>`;
+  }
+  if(S.offBits>0){
+    html+=`<div class="bit-seg off-s">
+      <div class="seg-bits">${offBin||'-'}</div>
+      <div class="seg-name">Offset 偏移</div>
+      <div class="seg-meta">${S.offBits}位 = 十进制 ${d.off}</div>
+    </div>`;
+  }
+  html+=`</div>`;
+
+  // 详细卡片
+  html+=`<div class="detail-cards">`;
+  if(S.tagBits>0){
+    html+=`<div class="d-card tag-d"><div class="dc-name">Tag</div><div class="dc-val" style="color:var(--tag-c)">${d.tag}</div><div class="dc-info">${S.tagBits}位 | 二进制 ${tagBin}</div></div>`;
+  }
+  if(S.idxBits>0){
+    html+=`<div class="d-card idx-d"><div class="dc-name">Index</div><div class="dc-val" style="color:var(--idx-c)">${d.idx}</div><div class="dc-info">${S.idxBits}位 | 二进制 ${idxBin}</div></div>`;
+  }
+  if(S.offBits>0){
+    html+=`<div class="d-card off-d"><div class="dc-name">Offset</div><div class="dc-val" style="color:var(--off-c)">${d.off}</div><div class="dc-info">${S.offBits}位 | 二进制 ${offBin}</div></div>`;
+  }
+  html+=`</div>`;
+
+  // 映射公式
+  html+=`<div class="formula">`;
+  html+=`块号 = <b>${d.bn}</b>`;
+  if(S.type==='direct'){
+    html+=` | 映射: 块${d.bn} % ${S.cln} = Cache行 <span class="hi">${d.idx}</span>，比较 <span class="ht">Tag=${d.tag}</span>`;
+  }else if(S.type==='fully'){
+    html+=` | 全相联: 在所有行中查找 <span class="ht">Tag=${d.tag}</span>`;
+  }else{
+    html+=` | 映射: 块${d.bn} % ${S.numSets} = 组 <span class="hi">${d.idx}</span>，在组内查找 <span class="ht">Tag=${d.tag}</span>`;
+  }
+  html+=`</div>`;
+
+  document.getElementById('decContent').innerHTML=html;
+  document.getElementById('decContent').style.display='block';
+
+  // 动画：位段依次出现
+  const segs=document.querySelectorAll('.bit-seg');
+  segs.forEach((s,i)=>{
+    s.style.opacity='0';s.style.transform='translateY(12px)';
+    setTimeout(()=>{s.style.transition='all .35s ease';s.style.opacity='1';s.style.transform='translateY(0)'},i*120+50);
+  });
+  const cards=document.querySelectorAll('.d-card');
+  cards.forEach((c,i)=>{
+    c.style.opacity='0';c.style.transform='scale(.9)';
+    setTimeout(()=>{c.style.transition='all .3s ease';c.style.opacity='1';c.style.transform='scale(1)'},i*80+300);
+  });
+}
+
+/* ===== 动画辅助 ===== */
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+
+function hlCacheLine(li,cls){
+  const row=document.querySelector(`tr[data-line="${li}"]`);
+  if(row){row.classList.add(cls);setTimeout(()=>row.classList.remove(cls),800)}
+}
+
+function hlMemCell(addr){
+  document.querySelectorAll('.mem-cell').forEach(e=>e.classList.remove('active-cell'));
+  const el=document.querySelector(`.mem-cell[data-addr="${addr}"]`);
+  if(el){el.classList.add('active-cell');el.scrollIntoView({behavior:'smooth',block:'nearest'})}
+}
+
+// 搜索动画：逐行高亮查找
+async function searchAnim(lines){
+  for(const li of lines){
+    hlCacheLine(li,'cl-search');
+    await delay(180);
+  }
+}
+
+function flyBlock(fromAddr,toLine){
+  const fromEl=document.querySelector(`.mem-cell[data-addr="${fromAddr}"]`);
+  const toRow=document.querySelector(`tr[data-line="${toLine}"]`);
+  if(!fromEl||!toRow)return;
+  const fr=fromEl.getBoundingClientRect();
+  const tr=toRow.getBoundingClientRect();
+  const f=document.createElement('div');
+  f.className='flyer';
+  f.style.left=(fr.left+fr.width/2-12)+'px';
+  f.style.top=(fr.top+fr.height/2-12)+'px';
+  f.style.opacity='1';f.style.transform='scale(1)';
+  document.body.appendChild(f);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    f.style.left=(tr.left+tr.width/2-12)+'px';
+    f.style.top=(tr.top+tr.height/2-12)+'px';
+    f.style.transform='scale(.5)';f.style.opacity='.2';
+  }));
+  setTimeout(()=>f.remove(),600);
+}
+
+function showToast(txt,t){
+  const e=document.getElementById('toast');e.textContent=txt;e.className='toast '+t+' show';
+  setTimeout(()=>e.classList.remove('show'),1600);
+}
+
+function addLog(txt){
+  S.logs.unshift(txt);if(S.logs.length>50)S.logs.pop();
+  document.getElementById('lBody').innerHTML=S.logs.map(l=>`<div class="le">${l}</div>`).join('');
+}
+
+/* ===== 核心访问流程 ===== */
+async function accessAddr(addr){
+  if(S.anim)return;
+  const maxA=S.amode==='byte'?S.mem-1:S.blockCount-1;
+  if(addr<0||addr>maxA){showToast(`地址超出范围 (0~${maxA})`,'mt');return}
+
+  S.anim=true;
+  document.getElementById('bAcc').disabled=true;
+
+  const d=decompose(addr);
+  S.curAddr=addr;
+
+  // 1) 地址分解
+  renderDecompose(addr);
+  await delay(400);
+
+  // 2) 高亮内存单元
+  hlMemCell(addr);
+  await delay(300);
+
+  // 3) 激活映射箭头
+  document.getElementById('mArr').classList.add('act');
+  document.getElementById('mLbl').style.color='var(--accent)';
+  await delay(300);
+
+  // 4) 查找Cache
+  const res=lookup(d);
+
+  // 搜索动画
+  if(S.type==='fully'){
+    const lines=[];for(let i=0;i<S.cln;i++)lines.push(i);
+    await searchAnim(lines);
+  }else if(S.type==='set'){
+    const ss=d.idx*S.ways;
+    const lines=[];for(let i=0;i<S.ways;i++)lines.push(ss+i);
+    await searchAnim(lines);
+  }
+
+  await delay(200);
+  S.stats.t++;
+
+  if(res.hit){
+    S.stats.h++;
+    hlCacheLine(res.li,'cl-hit');
+    showToast(`命中! Cache行${res.li}`,'ht');
+    addLog(`<span class="lh">命中</span> 地址${addr} → 块${d.bn} → Cache行${res.li} (Tag=${d.tag})`);
+  }else{
+    S.stats.m++;
+    if(res.li>=0)hlCacheLine(res.li,'cl-miss');
+    const rp=replace(d);
+    let logTxt=`<span class="lm">缺失</span> 地址${addr} → 块${d.bn}`;
+    if(rp.rp)logTxt+=` | <span class="lr">替换</span> 行${rp.li}: 块${rp.rp.bn}→块${d.bn}`;
+    else logTxt+=` | 装入行${rp.li}`;
+    flyBlock(addr,rp.li);
+    await delay(550);
+    hlCacheLine(rp.li,'cl-load');
+    showToast(`缺失! 装入Cache行${rp.li}`,'mt');
+    addLog(logTxt);
+  }
+
+  render();
+  hlMemCell(addr);
+
+  setTimeout(()=>{
+    document.getElementById('mArr').classList.remove('act');
+    document.getElementById('mLbl').style.color='';
+  },900);
+
+  S.anim=false;
+  document.getElementById('bAcc').disabled=false;
+}
+
+/* ===== 事件处理 ===== */
+function doAccess(){
+  const v=parseInt(document.getElementById('iAddr').value);
+  if(isNaN(v)){showToast('请输入有效地址','mt');return}
+  accessAddr(v);
+}
+function doRand(){
+  const maxA=S.amode==='byte'?S.mem-1:S.blockCount-1;
+  const a=Math.floor(Math.random()*(maxA+1));
+  document.getElementById('iAddr').value=a;
+  accessAddr(a);
+}
+function clkAddr(a){document.getElementById('iAddr').value=a;accessAddr(a)}
+
+let seqTm=null;
+function doSeq(){
+  if(seqTm){clearInterval(seqTm);seqTm=null;showToast('遍历已停止','mt');return}
+  let cur=0;const step=S.amode==='byte'?S.blk:1;const maxA=S.amode==='byte'?S.mem-1:S.blockCount-1;
+  showToast('开始顺序遍历...','ht');
+  seqTm=setInterval(()=>{
+    if(cur>maxA||S.anim)return;
+    document.getElementById('iAddr').value=cur;accessAddr(cur);cur+=step;
+    if(cur>maxA){clearInterval(seqTm);seqTm=null;showToast('遍历完成','ht')}
+  },380);
+}
+function doReset(){
+  if(seqTm){clearInterval(seqTm);seqTm=null}
+  resetAll();
+  document.getElementById('decContent').innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:50px;color:var(--fg-muted);font-size:13px">输入地址后查看分解结果</div>';
+  showToast('已重置','ht');
+}
+
+// 映射方式切换
+document.getElementById('mtabs').addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  document.querySelectorAll('.mapping-tabs button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  S.type=b.dataset.t;
+  document.getElementById('gWay').style.display=S.type==='set'?'flex':'none';
+  resetAll();
+});
+
+// 参数变更
+['sMem','sBlk','sCln','sWay','sAdr'].forEach(id=>{
+  document.getElementById(id).addEventListener('change',()=>{
+    S.mem=parseInt(document.getElementById('sMem').value);
+    S.blk=parseInt(document.getElementById('sBlk').value);
+    S.cln=parseInt(document.getElementById('sCln').value);
+    S.ways=parseInt(document.getElementById('sWay').value);
+    S.amode=document.getElementById('sAdr').value;
+    // 约束：块大小≤内存大小
+    if(S.blk>S.mem){
+      const opts=document.getElementById('sBlk').options;
+      for(let i=opts.length-1;i>=0;i--){if(parseInt(opts[i].value)<=S.mem){document.getElementById('sBlk').value=opts[i].value;S.blk=parseInt(opts[i].value);break}}
+    }
+    // 约束：cache行数≤块数
+    if(S.cln>S.mem/S.blk){
+      const bc=S.mem/S.blk;
+      const opts=document.getElementById('sCln').options;
+      for(let i=opts.length-1;i>=0;i--){if(parseInt(opts[i].value)<=bc){document.getElementById('sCln').value=opts[i].value;S.cln=parseInt(opts[i].value);break}}
+    }
+    // 约束：路数≤行数
+    if(S.ways>S.cln){document.getElementById('sWay').value=Math.min(2,S.cln);S.ways=Math.min(2,S.cln)}
+    // 更新块大小选项可见性
+    const blkOpts=document.getElementById('sBlk').options;
+    for(let i=0;i<blkOpts.length;i++){
+      const v=parseInt(blkOpts[i].value);
+      blkOpts[i].disabled=v>S.mem;
+    }
+    // 更新Cache行选项可见性
+    const bc=S.mem/S.blk;
+    const clnOpts=document.getElementById('sCln').options;
+    for(let i=0;i<clnOpts.length;i++){
+      const v=parseInt(clnOpts[i].value);
+      clnOpts[i].disabled=v>bc;
+    }
+    resetAll();
+  });
+});
+
+// 回车访问
+document.getElementById('iAddr').addEventListener('keydown',e=>{if(e.key==='Enter')doAccess()});
+
+// 初始化
+resetAll();
+addLog('系统就绪，请输入地址或点击主存单元开始');
+</script>
+</body>
+</html>

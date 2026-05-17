@@ -33,6 +33,7 @@
       <button class="cat-tab" data-cat="进程">进程</button>
       <button class="cat-tab" data-cat="内存">内存</button>
       <button class="cat-tab" data-cat="文件">文件</button>
+      <button class="cat-tab" data-cat="设备">设备</button>
     </div>
 
     <div class="demos-grid" id="demosGrid"></div>
@@ -71,9 +72,33 @@
         excerpt: "生产者-消费者、读者-写者、哲学家就餐等经典同步问题的可视化演示。",
       },
       {
+        id: "signal-mechanism",
+        title: "信号机制过程演示",
+        file: "信号机制过程演示.html",
+        category: "进程",
+        tags: ["信号", "进程通信"],
+        excerpt: "操作系统中信号机制的完整工作流程演示，包括信号发送、捕获与处理。",
+      },
+      {
+        id: "cache-mapping",
+        title: "缓存映射方式可视化",
+        file: "缓存映射方式可视化.html",
+        category: "内存",
+        tags: ["Cache", "映射"],
+        excerpt: "直接映射、全相联映射、组相联映射三种 Cache 映射方式的可视化对比。",
+      },
+      {
+        id: "paging",
+        title: "分页存储管理",
+        file: "分页存储管理.html",
+        category: "内存",
+        tags: ["分页", "内存管理"],
+        excerpt: "分页存储管理的地址转换、页表结构与快表机制详解。",
+      },
+      {
         id: "segmentation",
         title: "分段存储管理",
-        file: "segmentation.html",
+        file: "分段存储管理.html",
         category: "内存",
         tags: ["分段", "内存管理"],
         excerpt: "分段存储管理的地址转换、段表结构及保护机制详解。",
@@ -81,10 +106,42 @@
       {
         id: "seg-paging",
         title: "段页式存储管理",
-        file: "seg-paging.html",
+        file: "段页式存储管理.html",
         category: "内存",
         tags: ["段页式", "内存管理"],
         excerpt: "段页式存储管理的地址转换流程与优势分析。",
+      },
+      {
+        id: "memory-overview",
+        title: "分页 · 分段 · 段页式概览",
+        file: "分页分段段页式存储管理.html",
+        category: "内存",
+        tags: ["分页", "分段", "段页式"],
+        excerpt: "408 操作系统存储管理三大方式的对比概览与可视化展示。",
+      },
+      {
+        id: "contiguous-allocation",
+        title: "连续分配管理方式详解",
+        file: "连续分配管理方式详解.html",
+        category: "内存",
+        tags: ["连续分配", "分区"],
+        excerpt: "单一连续分配、固定分区、动态分区等连续分配管理方式详解。",
+      },
+      {
+        id: "alloc-algorithms",
+        title: "内存分配算法演示",
+        file: "一些算法.html",
+        category: "内存",
+        tags: ["分配算法", "动态分区"],
+        excerpt: "首次适应、最佳适应、最差适应等动态分区分配算法的可视化演示。",
+      },
+      {
+        id: "virtual-memory",
+        title: "虚拟内存管理",
+        file: "虚拟内存管理.html",
+        category: "内存",
+        tags: ["虚拟内存", "页面置换"],
+        excerpt: "虚拟内存的基本概念、请求分页以及页面置换算法的可视化演示。",
       },
       {
         id: "disk-organization",
@@ -94,12 +151,29 @@
         tags: ["外存", "文件系统"],
         excerpt: "连续分配、链接分配、索引分配等外存组织方式的对比与可视化。",
       },
+      {
+        id: "file-management",
+        title: "文件管理全景动画演示",
+        file: "文件管理全景动画演示.html",
+        category: "文件",
+        tags: ["文件系统", "文件管理"],
+        excerpt: "操作系统文件管理的全景动画演示，涵盖目录结构、文件存储与管理。",
+      },
+      {
+        id: "dma-flow",
+        title: "DMA 工作过程流程图",
+        file: "DMA工作过程流程图.html",
+        category: "设备",
+        tags: ["DMA", "I/O"],
+        excerpt: "DMA 直接存储器访问的完整工作流程与数据传输过程可视化。",
+      },
     ];
 
     const categoryIcons = {
-      "进程": "P",
-      "内存": "M",
-      "文件": "F",
+      "进程": "进",
+      "内存": "存",
+      "文件": "文",
+      "设备": "设",
     };
 
     /* ===== 渲染卡片 ===== */

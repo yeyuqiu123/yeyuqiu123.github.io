@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>408操作系统 - 连续分配管理方式详解</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: white;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .subtitle {
+            text-align: center;
+            color: rgba(255,255,255,0.9);
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+
+        /* 导航标签 */
+        .tabs {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .tab {
+            padding: 12px 24px;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: bold;
+        }
+        .tab:hover, .tab.active {
+            background: white;
+            color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        /* 内容卡片 */
+        .content-card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .content-card.active {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h2 {
+            color: #667eea;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        h3 {
+            color: #764ba2;
+            font-size: 1.3em;
+            margin: 20px 0 10px;
+        }
+
+        /* 内存可视化 */
+        .memory-visual {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 2px solid #e9ecef;
+        }
+        .memory-bar {
+            width: 100%;
+            height: 60px;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            margin: 10px 0;
+            border: 2px solid #333;
+        }
+        .memory-segment {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.9em;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .memory-segment:hover {
+            transform: scale(1.02);
+            z-index: 10;
+        }
+        .os { background: #e74c3c; }
+        .user { background: #3498db; }
+        .free { background: #95a5a6; }
+        .allocated { background: #2ecc71; }
+        .fragment { background: #f39c12; }
+        .buddy-split { background: #9b59b6; }
+
+        /* 分区表格 */
+        .partition-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 0.95em;
+        }
+        .partition-table th, .partition-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+        }
+        .partition-table th {
+            background: #667eea;
+            color: white;
+        }
+        .partition-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        .partition-table tr:hover {
+            background: #e3f2fd;
+        }
+
+        /* 算法对比卡片 */
+        .algo-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .algo-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%);
+            border-radius: 15px;
+            padding: 20px;
+            border-left: 5px solid;
+            transition: transform 0.3s;
+        }
+        .algo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+        }
+        .algo-card.ff { border-left-color: #3498db; }
+        .algo-card.bf { border-left-color: #e74c3c; }
+        .algo-card.wf { border-left-color: #f39c12; }
+        .algo-card.nf { border-left-color: #2ecc71; }
+        .algo-card.qf { border-left-color: #9b59b6; }
+        .algo-card.buddy { border-left-color: #1abc9c; }
+
+        /* 流程图 */
+        .flow-chart {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 15px;
+        }
+        .flow-box {
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 15px 20px;
+            text-align: center;
+            font-weight: bold;
+            min-width: 120px;
+        }
+        .flow-arrow {
+            font-size: 2em;
+            color: #667eea;
+        }
+
+        /* 知识点标签 */
+        .tag {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            margin: 3px;
+            font-weight: bold;
+        }
+        .tag-important { background: #ffebee; color: #c62828; }
+        .tag-concept { background: #e3f2fd; color: #1565c0; }
+        .tag-exam { background: #fff3e0; color: #ef6c00; }
+
+        /* 碎片对比 */
+        .fragment-demo {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .fragment-box {
+            flex: 1;
+            min-width: 300px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+        }
+        .fragment-box h4 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        /* 伙伴系统树 */
+        .buddy-tree {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .buddy-level {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .buddy-node {
+            width: 80px;
+            height: 50px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.85em;
+            position: relative;
+        }
+        .buddy-node.free { background: #95a5a6; }
+        .buddy-node.alloc { background: #e74c3c; }
+        .buddy-node.split { background: #f39c12; }
+
+        /* 提示框 */
+        .tip-box {
+            background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+            border-left: 5px solid #ffc107;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+        }
+        .tip-box::before {
+            content: "💡 ";
+            font-size: 1.2em;
+        }
+
+        /* 考试重点 */
+        .exam-focus {
+            background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+            border: 2px solid #e57373;
+            border-radius: 15px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .exam-focus h4 {
+            color: #c62828;
+            margin-bottom: 10px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8em; }
+            .tab { padding: 8px 16px; font-size: 0.9em; }
+            .algo-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 408操作系统</h1>
+        <p class="subtitle">连续分配管理方式 · 完整知识点图解</p>
+
+        <div class="tabs">
+            <div class="tab active" onclick="showTab('overview')">📋 总览</div>
+            <div class="tab" onclick="showTab('single')">1️⃣ 单一连续</div>
+            <div class="tab" onclick="showTab('fixed')">2️⃣ 固定分区</div>
+            <div class="tab" onclick="showTab('dynamic')">3️⃣ 动态分区</div>
+            <div class="tab" onclick="showTab('indexed')">4️⃣ 索引搜索</div>
+            <div class="tab" onclick="showTab('relocation')">5️⃣ 动态重定位</div>
+            <div class="tab" onclick="showTab('fragment')">🧩 碎片专题</div>
+        </div>
+
+        <!-- 总览 -->
+        <div id="overview" class="content-card active">
+            <h2>📊 连续分配管理方式总览</h2>
+            <p>连续分配是指为每个用户程序分配<strong>一段连续的内存空间</strong>。根据分区策略不同，分为四大类：</p>
+
+            <table class="partition-table">
+                <tr>
+                    <th>分配方式</th>
+                    <th>分区数量</th>
+                    <th>分区大小</th>
+                    <th>碎片类型</th>
+                    <th>并发度</th>
+                    <th>408考频</th>
+                </tr>
+                <tr>
+                    <td><strong>单一连续分配</strong></td>
+                    <td>1个用户区</td>
+                    <td>固定（全部）</td>
+                    <td><span class="tag tag-important">内部碎片</span></td>
+                    <td>单道</td>
+                    <td>⭐⭐</td>
+                </tr>
+                <tr>
+                    <td><strong>固定分区分配</strong></td>
+                    <td>多个</td>
+                    <td>固定</td>
+                    <td><span class="tag tag-important">内部碎片</span></td>
+                    <td>多道</td>
+                    <td>⭐⭐⭐</td>
+                </tr>
+                <tr>
+                    <td><strong>动态分区分配</strong></td>
+                    <td>多个</td>
+                    <td>动态变化</td>
+                    <td><span class="tag tag-important">外部碎片</span></td>
+                    <td>多道</td>
+                    <td>⭐⭐⭐⭐⭐</td>
+                </tr>
+                <tr>
+                    <td><strong>动态重定位分区</strong></td>
+                    <td>多个</td>
+                    <td>动态变化</td>
+                    <td>外部碎片（可紧凑消除）</td>
+                    <td>多道</td>
+                    <td>⭐⭐⭐</td>
+                </tr>
+            </table>
+
+            <div class="exam-focus">
+                <h4>🎯 核心考点速记</h4>
+                <ul>
+                    <li><strong>内部碎片</strong>：分区内部未用空间（单一连续、固定分区、分页）</li>
+                    <li><strong>外部碎片</strong>：分区之间无法利用的小空闲块（动态分区、分段）</li>
+                    <li><strong>四种顺序搜索算法</strong>：FF、BF、WF、NF 的查找策略和优缺点</li>
+                    <li><strong>三种索引搜索算法</strong>：快速适应、伙伴系统、哈希算法</li>
+                    <li><strong>紧凑技术</strong>：消除外部碎片，需要重定位寄存器硬件支持</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 单一连续分配 -->
+        <div id="single" class="content-card">
+            <h2>1️⃣ 单一连续分配（Single Contiguous Allocation）</h2>
+
+            <h3>📐 内存结构</h3>
+            <div class="memory-visual">
+                <p style="text-align:center; margin-bottom:10px; font-weight:bold;">内存 = OS区 + 用户区</p>
+                <div class="memory-bar">
+                    <div class="memory-segment os" style="width: 30%;">操作系统(OS)</div>
+                    <div class="memory-segment user" style="width: 70%;">用户程序（独占全部）</div>
+                </div>
+                <p style="text-align:center; margin-top:10px; color:#666;">低地址 ←————————————————→ 高地址</p>
+            </div>
+
+            <h3>📖 基本原理</h3>
+            <ul>
+                <li>内存分为两部分：<strong>低地址区存放OS</strong>，<strong>高地址区存放用户程序</strong></li>
+                <li>用户程序<strong>独占</strong>整个用户内存空间</li>
+                <li><strong>任何时刻内存中只有一道用户程序</strong></li>
+            </ul>
+
+            <h3>✅ ❌ 特点</h3>
+            <div class="algo-grid">
+                <div class="algo-card ff">
+                    <h4>优点</h4>
+                    <ul>
+                        <li>实现简单，无需复杂硬件</li>
+                        <li>管理开销极小</li>
+                    </ul>
+                </div>
+                <div class="algo-card bf">
+                    <h4>缺点</h4>
+                    <ul>
+                        <li>只能单道运行，资源利用率极低</li>
+                        <li>有<strong>内部碎片</strong>（用户程序 < 用户区时）</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="tip-box">
+                <strong>考研要点：</strong>不需要内存保护机构（因为只有一道程序），但现代实现中通常用界地址寄存器防止越界。
+            </div>
+        </div>
+
+        <!-- 固定分区分配 -->
+        <div id="fixed" class="content-card">
+            <h2>2️⃣ 固定分区分配（Fixed Partition Allocation）</h2>
+
+            <h3>📐 内存结构</h3>
+            <div class="memory-visual">
+                <p style="text-align:center; margin-bottom:10px; font-weight:bold;">等大小分区 vs 不等大小分区</p>
+                <div class="memory-bar">
+                    <div class="memory-segment os" style="width: 15%;">OS</div>
+                    <div class="memory-segment allocated" style="width: 20%;">分区1(大)</div>
+                    <div class="memory-segment allocated" style="width: 15%;">分区2(中)</div>
+                    <div class="memory-segment free" style="width: 12%;">分区3(小)</div>
+                    <div class="memory-segment allocated" style="width: 18%;">分区4(中)</div>
+                    <div class="memory-segment free" style="width: 20%;">分区5(大)</div>
+                </div>
+                <p style="text-align:center; margin-top:10px; color:#666;">每个分区只能装入一道作业</p>
+            </div>
+
+            <h3>📖 基本原理</h3>
+            <ul>
+                <li>系统初始化时，将用户内存划分为<strong>若干个固定大小的分区</strong></li>
+                <li>每个分区只能装入<strong>一道作业</strong></li>
+                <li>通过<strong>分区说明表</strong>管理各分区状态</li>
+            </ul>
+
+            <h3>📋 分区说明表</h3>
+            <table class="partition-table">
+                <tr>
+                    <th>分区号</th>
+                    <th>起始地址</th>
+                    <th>大小</th>
+                    <th>状态</th>
+                </tr>
+                <tr><td>1</td><td>100K</td><td>32K</td><td style="color:#e74c3c;">已分配</td></tr>
+                <tr><td>2</td><td>132K</td><td>32K</td><td style="color:#2ecc71;">空闲</td></tr>
+                <tr><td>3</td><td>164K</td><td>64K</td><td style="color:#e74c3c;">已分配</td></tr>
+                <tr><td>4</td><td>228K</td><td>32K</td><td style="color:#2ecc71;">空闲</td></tr>
+            </table>
+
+            <h3>🔀 两种划分方式</h3>
+            <div class="algo-grid">
+                <div class="algo-card ff">
+                    <h4>等大小分区</h4>
+                    <ul>
+                        <li>所有分区大小相同</li>
+                        <li>程序太小 → 内部碎片大</li>
+                        <li>程序太大 → 无法装入</li>
+                    </ul>
+                </div>
+                <div class="algo-card bf">
+                    <h4>不等大小分区</h4>
+                    <ul>
+                        <li>分区大小按需求预先设定</li>
+                        <li>灵活性稍好</li>
+                        <li>但仍可能产生内部碎片</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="exam-focus">
+                <h4>🎯 关键结论</h4>
+                <p><strong>固定分区只有内部碎片，没有外部碎片！</strong>因为分区大小固定，不存在"总空闲足够但分散无法分配"的情况。</p>
+            </div>
+        </div>
+
+        <!-- 动态分区分配 -->
+        <div id="dynamic" class="content-card">
+            <h2>3️⃣ 动态分区分配（Dynamic Partition Allocation）⭐重点</h2>
+
+            <h3>📐 内存结构</h3>
+            <div class="memory-visual">
+                <p style="text-align:center; margin-bottom:10px; font-weight:bold;">分区大小和数量动态变化</p>
+                <div class="memory-bar">
+                    <div class="memory-segment os" style="width: 12%;">OS</div>
+                    <div class="memory-segment allocated" style="width: 22%;">作业A</div>
+                    <div class="memory-segment free" style="width: 18%;">空闲</div>
+                    <div class="memory-segment allocated" style="width: 28%;">作业B</div>
+                    <div class="memory-segment free" style="width: 10%;">空闲</div>
+                    <div class="memory-segment allocated" style="width: 10%;">作业C</div>
+                </div>
+            </div>
+
+            <h3>📖 基本原理</h3>
+            <ul>
+                <li><strong>不预先划分分区</strong>，作业装入时根据实际需要动态建立分区</li>
+                <li>分区大小 = 作业实际需要的大小</li>
+                <li>使用<strong>空闲分区表</strong>或<strong>空闲分区链</strong>记录未分配区域</li>
+            </ul>
+
+            <div class="tip-box">
+                <strong>分配过程：</strong>检索空闲分区 → 找出满足要求的分区 → 若分区>需求则分割（一部分分配，剩余仍为空闲）→ 若相等则直接分配
+            </div>
+
+            <h3>🔍 基于顺序搜索的四种算法</h3>
+
+            <div class="algo-grid">
+                <div class="algo-card ff">
+                    <h4>🥇 首次适应 FF</h4>
+                    <p><strong>排序：</strong>按地址递增</p>
+                    <p><strong>策略：</strong>从链首开始，<span style="color:#e74c3c;">第一个满足</span>的分区即分配</p>
+                    <p><strong>优点：</strong>简单、快；保留高地址大分区</p>
+                    <p><strong>缺点：</strong>低地址碎片多</p>
+                    <span class="tag tag-exam">408最常考</span>
+                </div>
+
+                <div class="algo-card bf">
+                    <h4>🥈 最佳适应 BF</h4>
+                    <p><strong>排序：</strong>按容量递增</p>
+                    <p><strong>策略：</strong>找<span style="color:#e74c3c;">最小的满足</span>分区</p>
+                    <p><strong>优点：</strong>碎片最小化</p>
+                    <p><strong>缺点：</strong>产生大量<strong>微小碎片</strong>（每次剩一点点）</p>
+                    <span class="tag tag-exam">408最常考</span>
+                </div>
+
+                <div class="algo-card wf">
+                    <h4>🥉 最坏适应 WF</h4>
+                    <p><strong>排序：</strong>按容量递减</p>
+                    <p><strong>策略：</strong>找<span style="color:#e74c3c;">最大的分区</span></p>
+                    <p><strong>优点：</strong>不易产生微小碎片</p>
+                    <p><strong>缺点：</strong>大分区被迅速消耗</p>
+                </div>
+
+                <div class="algo-card nf">
+                    <h4>🔁 邻近适应 NF</h4>
+                    <p><strong>排序：</strong>按地址（循环链表）</p>
+                    <p><strong>策略：</strong>从<span style="color:#e74c3c;">上一次结束位置</span>继续查找</p>
+                    <p><strong>优点：</strong>均衡分布，查找效率高</p>
+                    <p><strong>缺点：</strong>缺乏大分区</p>
+                </div>
+            </div>
+
+            <h3>📊 四种算法对比表（必背）</h3>
+            <table class="partition-table">
+                <tr>
+                    <th>算法</th>
+                    <th>排序依据</th>
+                    <th>分配策略</th>
+                    <th>碎片情况</th>
+                    <th>大分区保留</th>
+                </tr>
+                <tr>
+                    <td><strong>首次适应 FF</strong></td>
+                    <td>地址递增</td>
+                    <td>第一个满足</td>
+                    <td>低地址碎片多</td>
+                    <td>高地址保留</td>
+                </tr>
+                <tr>
+                    <td><strong>最佳适应 BF</strong></td>
+                    <td>容量递增</td>
+                    <td>最小满足</td>
+                    <td>大量微小碎片</td>
+                    <td>无特殊保留</td>
+                </tr>
+                <tr>
+                    <td><strong>最坏适应 WF</strong></td>
+                    <td>容量递减</td>
+                    <td>最大分区</td>
+                    <td>碎片少但大</td>
+                    <td>快速消耗</td>
+                </tr>
+                <tr>
+                    <td><strong>邻近适应 NF</strong></td>
+                    <td>地址循环</td>
+                    <td>从上一次继续</td>
+                    <td>分布均匀</td>
+                    <td>缺乏大分区</td>
+                </tr>
+            </table>
+
+            <h3>🔄 回收与合并</h3>
+            <div class="flow-chart">
+                <div class="flow-box">释放分区</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">检查上邻</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">检查下邻</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">合并空闲区</div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-box">更新空闲链</div>
+            </div>
+        </div>
+
+        <!-- 基于索引搜索 -->
+        <div id="indexed" class="content-card">
+            <h2>4️⃣ 基于索引搜索的分配算法 ⭐重点补充</h2>
+            <p>当系统规模很大时，空闲分区链很长，顺序搜索效率低。<strong>索引搜索</strong>将空闲分区按大小分类，用索引表管理，避免遍历整个内存。</p>
+
+            <h3>📚 三种索引算法</h3>
+
+            <h3>⚡ 快速适应算法（Quick Fit）</h3>
+            <div class="memory-visual">
+                <p style="text-align:center; margin-bottom:15px; font-weight:bold;">索引表 → 按常用大小分类的多条链表</p>
+                <div style="display:flex; justify-content:center; gap:15px; flex-wrap:wrap;">
+                    <div style="text-align:center;">
+                        <div style="background:#e74c3c; color:white; padding:8px 15px; border-radius:8px; font-weight:bold;">2KB</div>
+                        <div style="margin-top:5px;">↓</div>
+                        <div style="background:#ecf0f1; padding:5px; border-radius:5px; font-size:0.8em;">2KB→2KB→2KB</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="background:#3498db; color:white; padding:8px 15px; border-radius:8px; font-weight:bold;">4KB</div>
+                        <div style="margin-top:5px;">↓</div>
+                        <div style="background:#ecf0f1; padding:5px; border-radius:5px; font-size:0.8em;">4KB→4KB</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="background:#2ecc71; color:white; padding:8px 15px; border-radius:8px; font-weight:bold;">8KB</div>
+                        <div style="margin-top:5px;">↓</div>
+                        <div style="background:#ecf0f1; padding:5px; border-radius:5px; font-size:0.8em;">8KB→8KB→8KB→8KB</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="background:#f39c12; color:white; padding:8px 15px; border-radius:8px; font-weight:bold;">16KB</div>
+                        <div style="margin-top:5px;">↓</div>
+                        <div style="background:#ecf0f1; padding:5px; border-radius:5px; font-size:0.8em;">16KB</div>
+                    </div>
+                    <div style="text-align:center;">
+                        <div style="background:#9b59b6; color:white; padding:8px 15px; border-radius:8px; font-weight:bold;">32KB</div>
+                        <div style="margin-top:5px;">↓</div>
+                        <div style="background:#ecf0f1; padding:5px; border-radius:5px; font-size:0.8em;">32KB→32KB</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="algo-card qf" style="margin:15px 0;">
+                <h4>快速适应特点</h4>
+                <ul>
+                    <li><strong>分类：</strong>按进程常用的空间大小分类（2KB、4KB、8KB...）</li>
+                    <li><strong>分配：</strong>查索引表 → 定位链表 → 取第一块（<span style="color:#e74c3c;">不分割！</span>）</li>
+                    <li><strong>优点：</strong>查找效率高、<strong>不产生分割碎片</strong>（无外部碎片）</li>
+                    <li><strong>缺点：</strong>回收合并复杂、系统开销大、可能有内部碎片</li>
+                </ul>
+            </div>
+
+            <h3>👬 伙伴系统（Buddy System）⭐⭐</h3>
+            <div class="memory-visual">
+                <p style="text-align:center; margin-bottom:15px; font-weight:bold;">所有分区大小均为 2 的 k 次幂</p>
+
+                <div class="buddy-tree">
+                    <div class="buddy-level">
+                        <div class="buddy-node free" style="width:200px;">256KB (2^8)</div>
+                    </div>
+                    <div style="font-size:1.5em; color:#666;">↓ 分裂</div>
+                    <div class="buddy-level">
+                        <div class="buddy-node split" style="width:100px;">128KB</div>
+                        <div class="buddy-node split" style="width:100px;">128KB</div>
+                    </div>
+                    <div style="font-size:1.5em; color:#666;">↓ 再分裂</div>
+                    <div class="buddy-level">
+                        <div class="buddy-node alloc" style="width:50px;">64KB<br>已分配</div>
+                        <div class="buddy-node free" style="width:50px;">64KB<br>空闲</div>
+                        <div class="buddy-node free" style="width:50px;">64KB<br>空闲</div>
+                        <div class="buddy-node free" style="width:50px;">64KB<br>空闲</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="algo-card buddy" style="margin:15px 0;">
+                <h4>伙伴系统核心规则</h4>
+                <ul>
+                    <li><strong>大小规则：</strong>所有分区大小 = 2^k（1 ≤ k ≤ m）</li>
+                    <li><strong>分配：</strong>找满足 2^(i-1) < n ≤ 2^i 的最小块；若无则分裂更大的块</li>
+                    <li><strong>伙伴地址：</strong>若 (x/2^k) 为偶数 → 伙伴=x+2^k；为奇数 → 伙伴=x-2^k</li>
+                    <li><strong>回收：</strong>检查伙伴是否空闲 → 是则合并为 2^(k+1) → 递归检查</li>
+                    <li><strong>应用：</strong><span style="color:#e74c3c; font-weight:bold;">Linux内核物理内存管理</span></li>
+                </ul>
+            </div>
+
+            <div class="exam-focus">
+                <h4>🎯 伙伴系统真题示例</h4>
+                <p>请求分配100KB（约25页），最小单元1页：</p>
+                <ol>
+                    <li>2^4=16 < 25 ≤ 32=2^5，需要分配 <strong>32页</strong></li>
+                    <li>若32页链表为空 → 找64页块</li>
+                    <li>64页块 <strong>分裂</strong>为两个32页伙伴</li>
+                    <li>一个32页 <strong>分配</strong>，另一个入32页链表</li>
+                </ol>
+            </div>
+
+            <h3>🔢 哈希算法（Hash-based）</h3>
+            <div class="algo-card" style="border-left-color:#e67e22; margin:15px 0;">
+                <h4>哈希算法特点</h4>
+                <ul>
+                    <li><strong>结构：</strong>哈希表（关键字=分区大小）+ 链表</li>
+                    <li><strong>分配：</strong>Hash(size) → 定位表项 → 取链表第一块</li>
+                    <li><strong>优点：</strong>查找极快，平均 <strong>O(1)</strong></li>
+                    <li><strong>缺点：</strong>哈希冲突处理复杂、回收合并困难</li>
+                </ul>
+            </div>
+
+            <h3>📊 三种索引算法对比</h3>
+            <table class="partition-table">
+                <tr>
+                    <th>算法</th>
+                    <th>分类依据</th>
+                    <th>分配方式</th>
+                    <th>内部碎片</th>
+                    <th>外部碎片</th>
+                    <th>查找效率</th>
+                </tr>
+                <tr>
+                    <td><strong>快速适应</strong></td>
+                    <td>常用大小</td>
+                    <td>取整块</td>
+                    <td>有</td>
+                    <td>无（不分割）</td>
+                    <td>高</td>
+                </tr>
+                <tr>
+                    <td><strong>伙伴系统</strong></td>
+                    <td>2的幂次</td>
+                    <td>可分裂</td>
+                    <td>有（向上取整）</td>
+                    <td>较少（可合并）</td>
+                    <td>高</td>
+                </tr>
+                <tr>
+                    <td><strong>哈希算法</strong></td>
+                    <td>哈希函数</td>
+                    <td>取链表首块</td>
+                    <td>有</td>
+                    <td>较少</td>
+                    <td>最高 O(1)</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- 动态重定位 -->
+        <div id="relocation" class="content-card">
+            <h2>5️⃣ 动态重定位分区分配</h2>
+
+            <h3>📐 紧凑技术（Compaction）</h3>
+            <div class="memory-visual">
+                <div class="fragment-demo">
+                    <div class="fragment-box">
+                        <h4>🔴 紧凑前</h4>
+                        <div class="memory-bar" style="flex-direction:column; height:auto; gap:3px; border:none;">
+                            <div style="display:flex; width:100%; height:30px;">
+                                <div class="memory-segment allocated" style="width:25%;">作业A</div>
+                                <div class="memory-segment fragment" style="width:10%;">碎片</div>
+                                <div class="memory-segment allocated" style="width:30%;">作业B</div>
+                                <div class="memory-segment fragment" style="width:8%;">碎片</div>
+                                <div class="memory-segment allocated" style="width:27%;">作业C</div>
+                            </div>
+                            <div style="display:flex; width:100%; height:30px;">
+                                <div class="memory-segment fragment" style="width:20%;">碎片</div>
+                                <div class="memory-segment allocated" style="width:35%;">作业D</div>
+                                <div class="memory-segment fragment" style="width:15%;">碎片</div>
+                                <div class="memory-segment free" style="width:30%;">大空闲</div>
+                            </div>
+                        </div>
+                        <p style="color:#e74c3c; margin-top:10px; font-size:0.9em;">总空闲足够，但分散无法分配大作业</p>
+                    </div>
+
+                    <div class="fragment-box">
+                        <h4>🟢 紧凑后</h4>
+                        <div class="memory-bar" style="flex-direction:column; height:auto; gap:3px; border:none;">
+                            <div style="display:flex; width:100%; height:30px;">
+                                <div class="memory-segment allocated" style="width:25%;">作业A</div>
+                                <div class="memory-segment allocated" style="width:30%;">作业B</div>
+                                <div class="memory-segment allocated" style="width:27%;">作业C</div>
+                                <div class="memory-segment allocated" style="width:18%;">作业D</div>
+                            </div>
+                            <div style="display:flex; width:100%; height:30px;">
+                                <div class="memory-segment free" style="width:100%;">连续大空闲区</div>
+                            </div>
+                        </div>
+                        <p style="color:#2ecc71; margin-top:10px; font-size:0.9em;">所有作业连续排列，空闲区合并</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3>📖 基本原理</h3>
+            <ul>
+                <li><strong>紧凑技术：</strong>移动所有已分配分区，使它们相邻，合并出大的连续空闲区</li>
+                <li><strong>前提：</strong>作业在内存中<strong>可以移动</strong>（动态运行时装入）</li>
+                <li><strong>代价：</strong>需要大量时间复制数据；需暂停作业执行</li>
+            </ul>
+
+            <h3>🔧 硬件支持：重定位寄存器</h3>
+            <div class="flow-chart">
+                <div class="flow-box" style="background:#e3f2fd;">逻辑地址</div>
+                <div class="flow-arrow">+</div>
+                <div class="flow-box" style="background:#fff3e0;">重定位寄存器</div>
+                <div class="flow-arrow">=</div>
+                <div class="flow-box" style="background:#e8f5e9;">物理地址</div>
+            </div>
+            <p style="text-align:center; margin-top:10px;"><strong>物理地址 = 逻辑地址 + 重定位寄存器值</strong></p>
+
+            <div class="tip-box">
+                <strong>关键理解：</strong>紧凑后只需修改各作业的<strong>重定位寄存器值</strong>，无需修改程序内部的逻辑地址！
+            </div>
+
+            <h3>✅ ❌ 特点</h3>
+            <div class="algo-grid">
+                <div class="algo-card ff">
+                    <h4>优点</h4>
+                    <ul>
+                        <li>消除外部碎片</li>
+                        <li>提高内存利用率</li>
+                        <li>支持作业在内存中移动</li>
+                    </ul>
+                </div>
+                <div class="algo-card bf">
+                    <h4>缺点</h4>
+                    <ul>
+                        <li>需要硬件支持（重定位寄存器）</li>
+                        <li>紧凑开销大（I/O时间）</li>
+                        <li>不能频繁紧凑</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 碎片专题 -->
+        <div id="fragment" class="content-card">
+            <h2>🧩 碎片问题详解</h2>
+
+            <div class="fragment-demo">
+                <div class="fragment-box" style="border:3px solid #e74c3c;">
+                    <h4 style="color:#e74c3c;">🔴 内部碎片</h4>
+                    <div class="memory-bar" style="width:80%; margin:15px auto;">
+                        <div class="memory-segment allocated" style="width:100%; position:relative;">
+                            分区大小=100KB
+                            <div style="position:absolute; right:0; top:0; bottom:0; width:30%; background:rgba(231,76,60,0.5); display:flex; align-items:center; justify-content:center; color:white; font-size:0.8em;">
+                                内部碎片<br>30KB未用
+                            </div>
+                        </div>
+                    </div>
+                    <p><strong>定义：</strong>分配给进程的内存中<strong>未被使用</strong>的部分</p>
+                    <p><strong>位置：</strong>已分配分区<strong>内部</strong></p>
+                    <p><strong>产生：</strong>分区大小 > 进程实际需要</p>
+                    <p><strong>存在：</strong>单一连续、固定分区、分页</p>
+                    <span class="tag tag-important">无法消除</span>
+                </div>
+
+                <div class="fragment-box" style="border:3px solid #f39c12;">
+                    <h4 style="color:#f39c12;">🟠 外部碎片</h4>
+                    <div class="memory-bar" style="width:80%; margin:15px auto; flex-direction:column; height:auto; gap:2px; border:none;">
+                        <div style="display:flex; width:100%; height:25px;">
+                            <div class="memory-segment allocated" style="width:30%;">作业1</div>
+                            <div class="memory-segment fragment" style="width:15%;">碎片</div>
+                            <div class="memory-segment allocated" style="width:25%;">作业2</div>
+                            <div class="memory-segment fragment" style="width:10%;">碎片</div>
+                            <div class="memory-segment allocated" style="width:20%;">作业3</div>
+                        </div>
+                    </div>
+                    <p><strong>定义：</strong>总空闲足够，但<strong>分散</strong>在多个小块中</p>
+                    <p><strong>位置：</strong>已分配分区<strong>之间</strong></p>
+                    <p><strong>产生：</strong>动态分区频繁分配回收</p>
+                    <p><strong>存在：</strong>动态分区、分段</p>
+                    <span class="tag tag-concept">紧凑技术可消除</span>
+                </div>
+            </div>
+
+            <div class="exam-focus">
+                <h4>🎯 408高频判断题</h4>
+                <table class="partition-table">
+                    <tr>
+                        <th>分配方式</th>
+                        <th>内部碎片</th>
+                        <th>外部碎片</th>
+                    </tr>
+                    <tr><td>单一连续分配</td><td>✅</td><td>❌</td></tr>
+                    <tr><td>固定分区分配</td><td>✅</td><td>❌</td></tr>
+                    <tr><td>动态分区分配</td><td>❌</td><td>✅</td></tr>
+                    <tr><td>分页存储</td><td>✅</td><td>❌</td></tr>
+                    <tr><td>分段存储</td><td>❌</td><td>✅</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(tabId) {
+            // 隐藏所有内容
+            document.querySelectorAll('.content-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            // 移除所有tab的active
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            // 显示选中内容
+            document.getElementById(tabId).classList.add('active');
+            // 标记选中tab
+            event.target.classList.add('active');
+            // 滚动到顶部
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>

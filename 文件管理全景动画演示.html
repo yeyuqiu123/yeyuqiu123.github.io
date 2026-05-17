@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS 文件管理全景动画演示</title>
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --accent: #38bdf8;
+    --accent2: #a78bfa;
+    --success: #34d399;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --border: #334155;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+  }
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    color: var(--text-dim);
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+  }
+  .main-stage {
+    display: grid;
+    grid-template-columns: 280px 1fr 320px;
+    gap: 16px;
+    width: 100%;
+    max-width: 1400px;
+    flex: 1;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    overflow: auto;
+  }
+  .panel-title {
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .panel-title::before {
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* 目录树 */
+  .tree-node {
+    margin-left: 14px;
+    border-left: 1px dashed var(--border);
+    padding-left: 10px;
+    position: relative;
+  }
+  .tree-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    cursor: default;
+    transition: 0.2s;
+    font-size: 0.85rem;
+  }
+  .tree-item:hover { background: rgba(56,189,248,0.08); }
+  .tree-item.active {
+    background: rgba(56,189,248,0.18);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .tree-icon { font-size: 1rem; }
+  .tree-root { margin-left: 0; border-left: none; padding-left: 0; }
+
+  /* 磁盘可视化 */
+  .disk-grid {
+    display: grid;
+    grid-template-columns: repeat(16, 1fr);
+    gap: 3px;
+  }
+  .block {
+    aspect-ratio: 1;
+    background: #334155;
+    border-radius: 3px;
+    font-size: 0.55rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    transition: all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+    position: relative;
+  }
+  .block.used {
+    background: var(--accent);
+    color: rgba(0,0,0,0.6);
+    font-weight: 700;
+    box-shadow: 0 0 8px rgba(56,189,248,0.3);
+  }
+  .block.index {
+    background: var(--accent2);
+    box-shadow: 0 0 8px rgba(167,139,250,0.3);
+  }
+  .block.highlight {
+    transform: scale(1.25);
+    z-index: 2;
+    border: 2px solid #fff;
+  }
+  .block.free { background: #1e293b; border: 1px dashed #475569; }
+
+  /* inode 表 */
+  .inode-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+  }
+  .inode-table th, .inode-table td {
+    border: 1px solid var(--border);
+    padding: 5px 8px;
+    text-align: left;
+  }
+  .inode-table th {
+    background: rgba(56,189,248,0.1);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .inode-row.active { background: rgba(56,189,248,0.12); }
+
+  /* 打开文件表 */
+  .oft-row {
+    background: rgba(167,139,250,0.08);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+    transition: 0.3s;
+  }
+  .oft-row.active {
+    border-color: var(--accent2);
+    background: rgba(167,139,250,0.18);
+  }
+
+  /* 缓冲区 */
+  .buffer-area {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .buffer-block {
+    width: 48px;
+    height: 48px;
+    background: rgba(251,191,36,0.1);
+    border: 2px solid var(--warn);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--warn);
+    transition: 0.4s;
+    opacity: 0.3;
+  }
+  .buffer-block.active { opacity: 1; transform: translateY(-4px); }
+
+  /* 控制栏 */
+  .controls {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: 0.2s;
+    color: #fff;
+  }
+  .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); }
+  .btn-success { background: linear-gradient(135deg, var(--success), #10b981); }
+  .btn-danger { background: linear-gradient(135deg, var(--danger), #ef4444); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.1); }
+
+  /* 解说区 */
+  .narration {
+    max-width: 1400px;
+    width: 100%;
+    margin-top: 16px;
+    background: linear-gradient(90deg, rgba(56,189,248,0.08), rgba(167,139,250,0.08));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    font-size: 0.95rem;
+    line-height: 1.7;
+    min-height: 80px;
+  }
+  .narration .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .tag-kp { background: rgba(56,189,248,0.15); color: var(--accent); }
+  .tag-op { background: rgba(167,139,250,0.15); color: var(--accent2); }
+
+  /* 权限位 */
+  .perm-bits {
+    font-family: "Courier New", monospace;
+    background: #0f172a;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+  }
+
+  @media (max-width: 1100px) {
+    .main-stage { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🗂️ OS 文件管理全景演示</h1>
+<div class="subtitle">用一个「创建 → 打开 → 写入 → 读取 → 关闭 → 删除」实例，串联目录、inode、索引分配、打开文件表、缓冲区、权限等全部知识点</div>
+
+<div class="main-stage">
+  <!-- 左侧面板：目录结构 + 权限 -->
+  <div class="panel">
+    <div class="panel-title">目录结构 (树形目录)</div>
+    <div id="treeView"></div>
+    <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px;">
+      <div class="panel-title">权限 & 属性</div>
+      <div id="permView" style="font-size:0.82rem; line-height:1.8;"></div>
+    </div>
+  </div>
+
+  <!-- 中间面板：磁盘块 + inode -->
+  <div class="panel" style="display:flex; flex-direction:column; gap:16px;">
+    <div>
+      <div class="panel-title">磁盘块 (索引分配 / 混合索引)</div>
+      <div class="disk-grid" id="diskGrid"></div>
+      <div style="margin-top:8px; display:flex; gap:12px; font-size:0.75rem; color:var(--text-dim);">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>数据块</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--accent2);border-radius:2px;vertical-align:middle;margin-right:4px;"></span>索引块</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#1e293b;border:1px dashed #475569;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>空闲块</span>
+      </div>
+    </div>
+    <div>
+      <div class="panel-title">inode 表 (文件控制块 FCB)</div>
+      <table class="inode-table">
+        <thead>
+          <tr><th>i-no</th><th>类型</th><th>大小</th><th>块指针</th><th>权限</th><th>链接</th></tr>
+        </thead>
+        <tbody id="inodeBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 右侧面板：打开文件表 + 缓冲区 -->
+  <div class="panel">
+    <div class="panel-title">系统打开文件表 (OFT)</div>
+    <div id="oftView"></div>
+    <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px;">
+      <div class="panel-title">缓冲区缓存 (Buffer Cache)</div>
+      <div class="buffer-area" id="bufferView"></div>
+      <div style="margin-top:8px; font-size:0.75rem; color:var(--text-dim);">
+        减少磁盘 I/O 次数，实现预读与延迟写
+      </div>
+    </div>
+    <div style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px;">
+      <div class="panel-title">文件分配方式对比</div>
+      <div id="allocInfo" style="font-size:0.78rem; color:var(--text-dim); line-height:1.7;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 控制与解说 -->
+<div class="controls">
+  <button class="btn btn-primary" onclick="step(0)">1️⃣ 创建文件</button>
+  <button class="btn btn-primary" onclick="step(1)">2️⃣ 打开文件</button>
+  <button class="btn btn-primary" onclick="step(2)">3️⃣ 写入数据</button>
+  <button class="btn btn-primary" onclick="step(3)">4️⃣ 读取文件</button>
+  <button class="btn btn-primary" onclick="step(4)">5️⃣ 关闭文件</button>
+  <button class="btn btn-danger" onclick="step(5)">6️⃣ 删除文件</button>
+  <button class="btn btn-success" onclick="reset()">🔄 重置演示</button>
+</div>
+
+<div class="narration" id="narration">
+  点击上方按钮，开始体验文件在操作系统中的完整生命周期。每个步骤都会高亮对应的数据结构，并在本区域解释涉及的核心知识点。
+</div>
+
+<script>
+/* ================= 数据模型 ================= */
+const DISK_SIZE = 128; // 磁盘块总数
+let disk = new Array(DISK_SIZE).fill(null); // null=空闲, {type:'data',ino}, {type:'index',ino}
+let inodes = []; // {ino, type, size, blocks:[], perms, links, name}
+let oft = []; // {fd, ino, offset, mode}
+let buffers = []; // {blk, dirty}
+let currentStep = -1;
+let treeData = [
+  {name:'/', type:'dir', children:[
+    {name:'home', type:'dir', children:[
+      {name:'user', type:'dir', children:[
+        {name:'report.txt', type:'file', ino:null}
+      ]}
+    ]},
+    {name:'etc', type:'dir', children:[]}
+  ]}
+];
+
+/* ================= 渲染 ================= */
+function renderTree() {
+  const el = document.getElementById('treeView');
+  function build(node, depth=0) {
+    const isRoot = depth===0;
+    const icon = node.type==='dir' ? (node.name==='/'?'📂':'📁') : '📄';
+    const hasIno = node.ino !== undefined && node.ino !== null;
+    const cls = hasIno ? 'active' : '';
+    let html = `<div class="${isRoot?'tree-root':'tree-node'}">
+      <div class="tree-item ${cls}" data-ino="${node.ino??''}">
+        <span class="tree-icon">${icon}</span>
+        <span>${node.name}</span>
+        ${hasIno ? `<span style="color:var(--text-dim);font-size:0.7rem;margin-left:auto;">ino:${node.ino}</span>`:''}
+      </div>`;
+    if (node.children) {
+      for (let c of node.children) html += build(c, depth+1);
+    }
+    html += '</div>';
+    return html;
+  }
+  el.innerHTML = build(treeData[0]);
+}
+
+function renderDisk() {
+  const el = document.getElementById('diskGrid');
+  let html = '';
+  for (let i=0;i<DISK_SIZE;i++) {
+    const b = disk[i];
+    let cls = 'free';
+    let txt = '';
+    if (b) {
+      cls = b.type==='index' ? 'index' : 'used';
+      txt = b.type==='index' ? 'Ix' : 'D';
+    }
+    html += `<div class="block ${cls}" id="blk${i}">${txt}${b?b.ino:''}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderInodes() {
+  const el = document.getElementById('inodeBody');
+  let html = '';
+  for (let ino of inodes) {
+    const active = oft.some(o=>o.ino===ino.ino) ? 'active' : '';
+    const ptrs = ino.blocks.length ? ino.blocks.join(', ') : '-';
+    html += `<tr class="inode-row ${active}">
+      <td>${ino.ino}</td>
+      <td>${ino.type}</td>
+      <td>${ino.size} B</td>
+      <td>${ptrs}</td>
+      <td><span class="perm-bits">${ino.perms}</span></td>
+      <td>${ino.links}</td>
+    </tr>`;
+  }
+  if (!inodes.length) html = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">暂无 inode</td></tr>';
+  el.innerHTML = html;
+}
+
+function renderOFT() {
+  const el = document.getElementById('oftView');
+  if (!oft.length) { el.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;">当前无打开文件</div>'; return; }
+  let html = '';
+  for (let o of oft) {
+    const ino = inodes.find(x=>x.ino===o.ino);
+    html += `<div class="oft-row active">
+      <div style="display:flex;justify-content:space-between;">
+        <span>fd = ${o.fd}</span>
+        <span style="color:var(--accent2);">${o.mode}</span>
+      </div>
+      <div style="margin-top:4px;color:var(--text-dim);">
+        ino:${o.ino} 「${ino?ino.name:'?'}」 offset:${o.offset}
+      </div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderBuffers() {
+  const el = document.getElementById('bufferView');
+  let html = '';
+  for (let i=0;i<6;i++) {
+    const b = buffers[i];
+    const cls = b ? 'active' : '';
+    const txt = b ? (b.dirty?'写':'读') : '';
+    html += `<div class="buffer-block ${cls}">${txt}${b?b.blk:''}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderPerm(ino) {
+  const el = document.getElementById('permView');
+  if (!ino) { el.innerHTML = '暂无选中文件'; return; }
+  el.innerHTML = `
+    <div><b>文件名：</b>${ino.name}</div>
+    <div><b>inode 号：</b>${ino.ino}</div>
+    <div><b>权限位：</b><span class="perm-bits">${ino.perms}</span></div>
+    <div style="margin-top:6px; color:var(--text-dim); font-size:0.75rem;">
+      r=读(4)  w=写(2)  x=执行(1)<br>
+      三组：所有者 / 组 / 其他用户
+    </div>
+  `;
+}
+
+function renderAllocInfo() {
+  document.getElementById('allocInfo').innerHTML = `
+    <b>连续分配：</b>易产生碎片，需紧凑<br>
+    <b>链接分配：</b>无碎片，只支持顺序访问<br>
+    <b>索引分配：</b>支持直接访问，inode 含索引块指针（本演示采用）<br>
+    <b>混合索引：</b>直接指针 + 一次间接 + 二次间接，兼顾小/大文件
+  `;
+}
+
+function narrate(html) {
+  document.getElementById('narration').innerHTML = html;
+}
+
+/* ================= 工具 ================= */
+function allocBlocks(count, type, ino) {
+  const free = [];
+  for (let i=0;i<DISK_SIZE && free.length<count;i++) if (!disk[i]) free.push(i);
+  if (free.length < count) return null;
+  for (let b of free) disk[b] = {type, ino};
+  return free;
+}
+function freeBlocks(list) {
+  for (let b of list) disk[b] = null;
+}
+function highlightBlock(blk) {
+  const el = document.getElementById('blk'+blk);
+  if (!el) return;
+  el.classList.add('highlight');
+  setTimeout(()=>el.classList.remove('highlight'), 1200);
+}
+function highlightTree(ino) {
+  document.querySelectorAll('.tree-item').forEach(el=>el.classList.remove('active'));
+  const el = document.querySelector(`.tree-item[data-ino="${ino}"]`);
+  if (el) el.classList.add('active');
+}
+
+/* ================= 步骤逻辑 ================= */
+function reset() {
+  disk = new Array(DISK_SIZE).fill(null);
+  inodes = [];
+  oft = [];
+  buffers = [];
+  currentStep = -1;
+  // 重置树
+  function resetTree(node) {
+    if (node.type==='file') node.ino = null;
+    if (node.children) node.children.forEach(resetTree);
+  }
+  resetTree(treeData[0]);
+  renderAll();
+  narrate('演示已重置。点击「创建文件」开始新的文件生命周期。');
+}
+
+function renderAll() {
+  renderTree();
+  renderDisk();
+  renderInodes();
+  renderOFT();
+  renderBuffers();
+  renderAllocInfo();
+}
+
+function step(idx) {
+  currentStep = idx;
+  if (idx===0) doCreate();
+  else if (idx===1) doOpen();
+  else if (idx===2) doWrite();
+  else if (idx===3) doRead();
+  else if (idx===4) doClose();
+  else if (idx===5) doDelete();
+}
+
+/* ---- 1. 创建文件 ---- */
+function doCreate() {
+  reset();
+  // 分配 inode
+  const inoNum = 1;
+  const inode = {ino: inoNum, type:'file', size:0, blocks:[], perms:'rw-r--r--', links:1, name:'report.txt'};
+  inodes.push(inode);
+  // 分配一个索引块
+  const idxBlk = allocBlocks(1, 'index', inoNum);
+  inode.blocks = idxBlk; // 索引块号
+  // 挂到目录树
+  const fileNode = treeData[0].children[0].children[0].children[0];
+  fileNode.ino = inoNum;
+
+  renderAll();
+  highlightTree(inoNum);
+  highlightBlock(idxBlk[0]);
+  renderPerm(inode);
+
+  narrate(`
+    <span class="tag tag-kp">知识点：目录结构</span>
+    操作系统采用<b>树形目录结构</b>管理文件，从根目录 <code>/</code> 逐级向下查找。
+    <br><span class="tag tag-kp">知识点：inode / FCB</span>
+    创建文件时，系统分配一个 <b>inode（索引节点/文件控制块 FCB）</b>，存储文件的元数据（大小、权限、时间、块指针等），<b>不包含文件名</b>。
+    <br><span class="tag tag-kp">知识点：索引分配</span>
+    磁盘块采用<b>索引分配</b>：inode 中的指针指向一个<b>索引块</b>，索引块里再记录实际数据块地址。这样既支持随机访问，又避免外部碎片。
+  `);
+}
+
+/* ---- 2. 打开文件 ---- */
+function doOpen() {
+  if (!inodes.length) { alert('请先「创建文件」'); return; }
+  const inode = inodes[0];
+  const inoNum = inode.ino;
+  // 加入 OFT
+  oft.push({fd:3, ino:inoNum, offset:0, mode:'O_RDWR'});
+
+  renderAll();
+  highlightTree(inoNum);
+  renderPerm(inode);
+
+  narrate(`
+    <span class="tag tag-kp">知识点：open() 系统调用</span>
+    进程调用 <code>open("/home/user/report.txt", O_RDWR)</code> 时，操作系统执行以下动作：
+    <br>① <b>目录检索</b>：按路径逐层查找（根 inode → 目录数据块 → home inode → ... → 文件 inode）；
+    <br>② <b>权限检查</b>：比对 inode 中的权限位 <code>rw-r--r--</code>，验证进程是否有权以请求模式访问；
+    <br>③ <b>分配 fd</b>：在进程的<b>打开文件描述符表</b>中分配最小未用 fd（如 3），指向系统级<b>打开文件表（OFT）</b>中的条目；
+    <br>④ <b>OFT 条目</b>：记录 inode 指针、当前文件偏移量(offset)、打开模式、引用计数等信息。
+    <br><span class="tag tag-kp">知识点：文件描述符 vs 打开文件表</span>
+    fd 是进程私有的整数，OFT 条目是系统全局的。多个进程/线程可以共享同一个 OFT 条目（如 dup、fork 后），此时引用计数 > 1。
+  `);
+}
+
+/* ---- 3. 写入数据 ---- */
+function doWrite() {
+  if (!oft.length) { alert('请先「打开文件」'); return; }
+  const inode = inodes[0];
+  const inoNum = inode.ino;
+  // 分配 3 个数据块
+  const dataBlks = allocBlocks(3, 'data', inoNum);
+  // 将数据块号追加到 inode.blocks（演示简化：blocks[0]是索引块，后面是数据块号）
+  inode.blocks = inode.blocks.concat(dataBlks);
+  // 更新 inode 大小
+  inode.size = dataBlks.length * 512; // 假设每块 512B
+  // 更新 OFT 偏移量
+  oft[0].offset = inode.size;
+  oft[0].mode = 'O_WRONLY';
+  // 写入缓冲区
+  buffers = dataBlks.map((b,i)=>({blk:b, dirty:true}));
+
+  renderAll();
+  highlightTree(inoNum);
+  dataBlks.forEach((b,i)=>setTimeout(()=>highlightBlock(b), i*200));
+  renderPerm(inode);
+
+  narrate(`
+    <span class="tag tag-kp">知识点：write() 与 缓冲区</span>
+    进程调用 <code>write(fd, buf, count)</code>，数据先复制到<b>内核缓冲区缓存（Buffer Cache）</b>，标记为 dirty（脏页）。系统择机批量刷盘，减少物理 I/O 次数，这就是<b>延迟写（Delayed Write）</b>。
+    <br><span class="tag tag-kp">知识点：磁盘空间分配</span>
+    文件系统从<b>空闲块位图/链表</b>中分配 3 个数据块，并在索引块中登记它们的地址。inode 更新文件大小和块指针。
+    <br><span class="tag tag-kp">知识点：文件偏移量</span>
+    OFT 中的 offset 随写入自动后移，下次读写从该位置继续。支持 <code>lseek()</code> 任意调整，实现随机访问。
+  `);
+}
+
+/* ---- 4. 读取文件 ---- */
+function doRead() {
+  if (!oft.length) { alert('文件尚未打开（或已被关闭）'); return; }
+  const inode = inodes[0];
+  const inoNum = inode.ino;
+  // 修改 OFT 模式为读，偏移归零
+  oft[0].mode = 'O_RDONLY';
+  oft[0].offset = 0;
+  // 数据块进入缓冲区（预读）
+  const dataBlks = inode.blocks.slice(1); // blocks[0]是索引块，后面是数据块
+  buffers = dataBlks.map(b=>({blk:b, dirty:false}));
+
+  renderAll();
+  highlightTree(inoNum);
+  // 高亮索引块再到数据块的"跳转"
+  const idxBlk = inode.blocks[0];
+  highlightBlock(idxBlk);
+  dataBlks.forEach((b,i)=>setTimeout(()=>highlightBlock(b), 300+i*250));
+
+  renderPerm(inode);
+
+  narrate(`
+    <span class="tag tag-kp">知识点：read() 流程</span>
+    调用 <code>read(fd, buf, count)</code> 时：① 检查 OFT 中该 fd 对应的 inode 和权限；② 若数据已在<b>缓冲区缓存</b>中，直接内存拷贝（缓存命中）；③ 否则从磁盘读取。
+    <br><span class="tag tag-kp">知识点：索引分配读取</span>
+    读取时，系统先读<b>索引块</b>，再根据索引块中记录的数据块地址，直接读取各数据块。支持<b>随机访问（直接访问）</b>，无需像链接分配那样顺序遍历。
+    <br><span class="tag tag-kp">知识点：预读策略</span>
+    操作系统常采用<b>预读（Read-Ahead）</b>：在读取当前块时，提前将后续相邻块读入缓存，利用空间局部性加速顺序读取。
+  `);
+}
+
+/* ---- 5. 关闭文件 ---- */
+function doClose() {
+  if (!oft.length) { alert('文件未打开'); return; }
+  const inode = inodes[0];
+  // 刷缓冲区（脏块写回）
+  buffers = [];
+  // 移除 OFT 条目
+  oft = [];
+
+  renderAll();
+  highlightTree(inode.ino);
+  renderPerm(inode);
+
+  narrate(`
+    <span class="tag tag-kp">知识点：close() 系统调用</span>
+    调用 <code>close(fd)</code> 时，系统将 OFT 中对应条目移除，fd 回到可用池。若缓冲区仍有脏页，会在此阶段<b>强制写回磁盘</b>，确保数据持久化。
+    <br><span class="tag tag-kp">知识点：引用计数</span>
+    若多个进程共享同一个 OFT 条目（如 fork 或 dup），close 只减引用计数。计数归零时才真正释放 OFT 条目，但 inode 和磁盘数据依然存在。
+    <br><span class="tag tag-kp">知识点：fd 生命周期</span>
+    fd 只是进程级的整数标识。关闭后 fd 不再有效，但文件本身不受影响，后续仍可重新 open。
+  `);
+}
+
+/* ---- 6. 删除文件 ---- */
+function doDelete() {
+  if (!inodes.length) { alert('没有可删除的文件'); return; }
+  const inode = inodes[0];
+  const inoNum = inode.ino;
+  // 释放所有块（索引块+数据块）
+  const allBlks = [];
+  for (let i=0;i<DISK_SIZE;i++) if (disk[i] && disk[i].ino===inoNum) allBlks.push(i);
+  freeBlocks(allBlks);
+  // 释放 inode
+  inodes = [];
+  // 目录树移除 ino
+  const fileNode = treeData[0].children[0].children[0].children[0];
+  fileNode.ino = null;
+  oft = [];
+  buffers = [];
+
+  renderAll();
+  // 高亮被清空的块
+  allBlks.forEach((b,i)=>setTimeout(()=>{
+    const el = document.getElementById('blk'+b);
+    if(el){ el.style.background='var(--danger)'; el.style.transform='scale(0.8)'; }
+  }, i*100));
+
+  narrate(`
+    <span class="tag tag-kp">知识点：删除文件</span>
+    删除并不立即擦除磁盘数据！系统只是：① 将 inode 标记为空闲；② 将数据块和索引块归还<b>空闲空间管理表（位图/空闲链表）</b>；③ 从父目录的数据块中移除该目录项。
+    <br><span class="tag tag-kp">知识点：硬链接与引用计数</span>
+    inode 中有<b>链接计数（links）</b>。只有当 links 降为 0 且无进程打开该文件时，系统才真正回收磁盘块。若存在硬链接，删除仅减计数。
+    <br><span class="tag tag-kp">知识点：回收与碎片</span>
+    归还后的空闲块可能散布在磁盘各处，但由于采用索引分配，碎片不影响访问效率。文件系统可定期做<b>碎片整理</b>或采用 extents 优化连续度。
+  `);
+}
+
+/* ================= 初始化 ================= */
+renderAll();
+narrate('👆 点击上方按钮，开始体验文件在操作系统中的完整生命周期。流程：创建 → 打开 → 写入 → 读取 → 关闭 → 删除。');
+</script>
+
+</body>
+</html>

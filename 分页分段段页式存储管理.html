@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>408操作系统：分页 · 分段 · 段页式存储管理</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #dbeafe;
+            --secondary: #7c3aed;
+            --accent: #059669;
+            --danger: #dc2626;
+            --warning: #d97706;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #f1f5f9;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+        }
+
+        /* 导航 */
+        .nav {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 0 2rem;
+        }
+        .nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; height: 60px; gap: 2rem; }
+        .nav-title { font-weight: 700; font-size: 1.1rem; color: var(--primary); text-decoration: none; white-space: nowrap; }
+        .nav-links { display: flex; gap: 1.5rem; list-style: none; }
+        .nav-links a { text-decoration: none; color: var(--text-light); font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--primary); }
+        .nav-links a.active { color: var(--primary); font-weight: 700; position: relative; }
+        .nav-links a.active::after { content: ''; position: absolute; bottom: -4px; left: 0; right: 0; height: 2px; background: var(--primary); border-radius: 1px; }
+
+        /* 布局 */
+        .container { max-width: 1100px; margin: 0 auto; padding: 100px 2rem 4rem; }
+        .section { margin-bottom: 5rem; scroll-margin-top: 80px; }
+        .section-title { font-size: 2rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: 0.75rem; }
+        .section-title .icon { width: 40px; height: 40px; background: var(--primary-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        .section-subtitle { color: var(--text-light); font-size: 1.1rem; margin-bottom: 2rem; }
+
+        /* 卡片 */
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); }
+        .card-subtitle { font-size: 0.95rem; color: var(--text-light); margin-bottom: 1.5rem; }
+
+        /* 高亮框 */
+        .highlight-box {
+            background: linear-gradient(135deg, var(--primary-light) 0%, #eff6ff 100%);
+            border-left: 4px solid var(--primary);
+            padding: 1.25rem 1.5rem;
+            border-radius: 0 12px 12px 0;
+            margin: 1.5rem 0;
+        }
+        .highlight-box.warning { background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%); border-left-color: var(--warning); }
+        .highlight-box.danger { background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%); border-left-color: var(--danger); }
+        .highlight-box.accent { background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%); border-left-color: var(--accent); }
+
+        /* 表格 */
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.95rem; }
+        th { background: var(--code-bg); padding: 0.875rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); }
+        td { padding: 0.875rem 1rem; border-bottom: 1px solid var(--border); }
+        tr:hover td { background: var(--bg); }
+
+        /* 标签 */
+        .tag {
+            display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px;
+            font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem;
+        }
+        .tag-blue { background: var(--primary-light); color: var(--primary); }
+        .tag-purple { background: #ede9fe; color: var(--secondary); }
+        .tag-green { background: #d1fae5; color: var(--accent); }
+        .tag-red { background: #fee2e2; color: var(--danger); }
+        .tag-orange { background: #fef3c7; color: var(--warning); }
+
+        /* SVG 图表容器 */
+        .svg-container {
+            background: var(--card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+        }
+        .svg-caption { text-align: center; color: var(--text-light); font-size: 0.9rem; margin-top: 1rem; font-style: italic; }
+
+        /* 交互式计算器 */
+        .calculator {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-radius: 16px;
+            padding: 2rem;
+            border: 2px solid #bae6fd;
+        }
+        .calc-input-group { display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+        .calc-input-group label { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+        .calc-input-group input, .calc-input-group select {
+            padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 8px;
+            font-size: 0.9rem; font-family: monospace;
+        }
+        .calc-btn {
+            background: var(--primary); color: white; border: none; padding: 0.6rem 1.5rem;
+            border-radius: 8px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+        }
+        .calc-btn:hover { opacity: 0.9; }
+        .calc-result {
+            background: white; border-radius: 12px; padding: 1.5rem;
+            margin-top: 1rem; border: 1px solid var(--border);
+            font-family: monospace; font-size: 0.9rem; line-height: 2;
+        }
+
+        /* 对比卡片组 */
+        .compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+        .compare-card {
+            background: var(--card); border-radius: 12px; border: 2px solid var(--border);
+            padding: 1.5rem; transition: transform 0.2s, border-color 0.2s;
+        }
+        .compare-card:hover { transform: translateY(-2px); border-color: var(--primary); }
+        .compare-card h3 { font-size: 1.1rem; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+
+        /* 代码块 */
+        code {
+            background: var(--code-bg); padding: 0.2rem 0.4rem; border-radius: 4px;
+            font-family: "SF Mono", Monaco, monospace; font-size: 0.9em; color: var(--danger);
+        }
+
+        /* 学习入口卡片 */
+        .entry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+        .entry-card {
+            background: var(--card); border-radius: 16px; border: 2px solid var(--border);
+            padding: 2rem; text-decoration: none; color: inherit;
+            transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+            display: flex; flex-direction: column;
+        }
+        .entry-card:hover { transform: translateY(-4px); border-color: var(--primary); box-shadow: 0 8px 24px rgba(37,99,235,0.1); }
+        .entry-card .entry-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+        .entry-card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .entry-card p { color: var(--text-light); font-size: 0.9rem; flex: 1; }
+        .entry-card .entry-tag { margin-top: 1rem; }
+
+        /* 响应式 */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .container { padding: 80px 1rem 2rem; }
+            .section-title { font-size: 1.5rem; }
+            .calc-input-group { flex-direction: column; }
+            .entry-grid { grid-template-columns: 1fr; }
+        }
+
+        /* 动画 */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .card { animation: fadeIn 0.5s ease-out; }
+    </style>
+</head>
+<body>
+
+<!-- 导航 -->
+<nav class="nav">
+    <div class="nav-inner">
+        <a href="memory_management.html" class="nav-title">408 内存管理</a>
+        <ul class="nav-links">
+            <li><a href="memory_management.html" class="active">主页</a></li>
+            <li><a href="paging.html">分页</a></li>
+            <li><a href="segmentation.html">分段</a></li>
+            <li><a href="seg-paging.html">段页式</a></li>
+        </ul>
+    </div>
+</nav>
+
+<div class="container">
+
+<!-- 标题区 -->
+<div style="text-align: center; margin-bottom: 4rem; padding: 2rem 0;">
+    <h1 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; background: linear-gradient(135deg, var(--primary), var(--secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+        分页 · 分段 · 段页式存储管理
+    </h1>
+    <p style="font-size: 1.2rem; color: var(--text-light);">408操作系统考研核心知识点 · 图解 + 交互式演示</p>
+    <div style="margin-top: 1.5rem;">
+        <span class="tag tag-blue">离散分配</span>
+        <span class="tag tag-purple">虚拟存储基础</span>
+        <span class="tag tag-green">MMU地址变换</span>
+    </div>
+</div>
+
+<!-- 学习入口 -->
+<div class="entry-grid">
+    <a href="paging.html" class="entry-card">
+        <div class="entry-icon">📄</div>
+        <h3>分页存储管理</h3>
+        <p>固定大小划分 · 一维地址空间 · 无外碎片。理解页表、TLB、多级页表的核心机制。</p>
+        <div><span class="tag tag-blue entry-tag">开始学习 →</span></div>
+    </a>
+    <a href="segmentation.html" class="entry-card">
+        <div class="entry-icon">📐</div>
+        <h3>分段存储管理</h3>
+        <p>按逻辑意义划分 · 二维地址空间 · 支持共享与保护。掌握段表、越界检查、权限保护。</p>
+        <div><span class="tag tag-purple entry-tag">开始学习 →</span></div>
+    </a>
+    <a href="seg-paging.html" class="entry-card">
+        <div class="entry-icon">🧩</div>
+        <h3>段页式存储管理</h3>
+        <p>先分段后分页 · 二维逻辑地址 · 三次访存。理解分段与分页的折中设计。</p>
+        <div><span class="tag tag-green entry-tag">开始学习 →</span></div>
+    </a>
+</div>
+
+<!-- ==================== 引入背景 ==================== -->
+<section class="section" id="intro">
+    <h2 class="section-title"><div class="icon">🎯</div>引入背景：为什么需要离散分配？</h2>
+    <p class="section-subtitle">从连续分配到分页/分段/段页式的演进逻辑</p>
+
+    <div class="card">
+        <h3 class="card-title">连续分配的致命缺陷</h3>
+        <div class="highlight-box danger">
+            <strong>外碎片（External Fragmentation）</strong>：多次分配回收后，内存中出现大量无法利用的小空闲分区，总和足够但无法分配大进程。
+            <br><strong>紧凑（Compaction）代价高</strong>：移动已装入内存的进程需要动态重定位，开销极大且必须停止运行。
+        </div>
+
+        <div class="svg-container">
+            <svg viewBox="0 0 800 220" style="width:100%; max-width:800px; margin:0 auto; display:block;">
+                <defs>
+                    <pattern id="stripe" patternUnits="userSpaceOnUse" width="8" height="8">
+                        <path d="M0,8 L8,0" stroke="#cbd5e1" stroke-width="1" fill="none"/>
+                    </pattern>
+                    <marker id="arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                        <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+                    </marker>
+                    <clipPath id="mem-clip"><rect x="50" y="50" width="700" height="50" rx="4"/></clipPath>
+                </defs>
+                <text x="400" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">连续分配的外碎片问题</text>
+                <rect x="50" y="50" width="700" height="50" rx="4" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+                <g clip-path="url(#mem-clip)">
+                    <rect x="50" y="50" width="180" height="50" fill="#dbeafe"/>
+                    <rect x="230" y="50" width="80" height="50" fill="url(#stripe)"/>
+                    <rect x="310" y="50" width="120" height="50" fill="#dcfce7"/>
+                    <rect x="430" y="50" width="60" height="50" fill="url(#stripe)"/>
+                    <rect x="490" y="50" width="100" height="50" fill="#fef3c7"/>
+                    <rect x="590" y="50" width="160" height="50" fill="url(#stripe)"/>
+                </g>
+                <rect x="50" y="50" width="180" height="50" rx="4" fill="none" stroke="#2563eb" stroke-width="2"/>
+                <rect x="230" y="50" width="80" height="50" rx="4" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4"/>
+                <rect x="310" y="50" width="120" height="50" rx="4" fill="none" stroke="#059669" stroke-width="2"/>
+                <rect x="430" y="50" width="60" height="50" rx="4" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4"/>
+                <rect x="490" y="50" width="100" height="50" rx="4" fill="none" stroke="#d97706" stroke-width="2"/>
+                <rect x="590" y="50" width="160" height="50" rx="4" fill="none" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4"/>
+                <text x="140" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="#1e40af">进程A (180KB)</text>
+                <text x="270" y="80" text-anchor="middle" font-size="12" fill="#64748b">空闲 80KB</text>
+                <text x="370" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="#065f46">进程B (120KB)</text>
+                <text x="460" y="80" text-anchor="middle" font-size="12" fill="#64748b">空闲 60KB</text>
+                <text x="540" y="80" text-anchor="middle" font-size="14" font-weight="600" fill="#92400e">进程C (100KB)</text>
+                <text x="670" y="80" text-anchor="middle" font-size="12" fill="#64748b">空闲 160KB</text>
+                <text x="400" y="135" text-anchor="middle" font-size="14" fill="#dc2626" font-weight="600">总空闲 = 80 + 60 + 160 = 300KB，但进程D需要200KB连续空间 → 分配失败！</text>
+                <path d="M400 155 L400 175" stroke="#64748b" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+                <text x="400" y="200" text-anchor="middle" font-size="14" fill="#2563eb" font-weight="700">解决方案：将进程拆分为小块，离散装入不连续的内存空间</text>
+            </svg>
+            <div class="svg-caption">图1-1：连续分配产生外碎片，离散分配是解决之道</div>
+        </div>
+    </div>
+
+    <div class="compare-grid">
+        <div class="compare-card">
+            <h3><span class="tag tag-blue">分页</span>Paging</h3>
+            <p><strong>引入原因：</strong>解决连续分配的<strong>外碎片</strong>问题，支持程序浮动。</p>
+            <p style="margin-top:0.5rem; color:var(--text-light); font-size:0.9rem;">将进程和内存都划分为<strong>固定大小</strong>的页/页框，进程的最后一页有内碎片（平均半页）。</p>
+        </div>
+        <div class="compare-card">
+            <h3><span class="tag tag-purple">分段</span>Segmentation</h3>
+            <p><strong>引入原因：</strong>分页是物理切割，不反映程序<strong>逻辑结构</strong>，不利于共享和保护。</p>
+            <p style="margin-top:0.5rem; color:var(--text-light); font-size:0.9rem;">按程序逻辑（代码段、数据段、栈段）划分，<strong>段长不固定</strong>，产生外碎片。</p>
+        </div>
+        <div class="compare-card">
+            <h3><span class="tag tag-green">段页式</span>Segmented Paging</h3>
+            <p><strong>引入原因：</strong>分段有外碎片且段长过大不便离散分配，需<strong>折中方案</strong>。</p>
+            <p style="margin-top:0.5rem; color:var(--text-light); font-size:0.9rem;">先分段满足逻辑需求，再分页消除外碎片。地址变换需三次访存。</p>
+        </div>
+    </div>
+</section>
+
+<!-- ==================== 综合对比 ==================== -->
+<section class="section" id="compare">
+    <h2 class="section-title"><div class="icon">⚖️</div>综合对比</h2>
+
+    <div class="card">
+        <h3 class="card-title">1. 操作系统与硬件的分工</h3>
+        <div class="svg-container">
+            <svg viewBox="0 0 900 320" style="width:100%; max-width:900px; margin:0 auto; display:block;">
+                <text x="450" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">操作系统 vs 硬件（MMU）的职责划分</text>
+                <rect x="80" y="50" width="300" height="230" rx="12" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+                <text x="230" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#1e40af">操作系统（软件）</text>
+                <line x1="90" y1="95" x2="370" y2="95" stroke="#bfdbfe"/>
+                <text x="230" y="120" text-anchor="middle" font-size="12" fill="#1d4ed8">• 创建/维护页表、段表</text>
+                <text x="230" y="145" text-anchor="middle" font-size="12" fill="#1d4ed8">• 分配/回收页框/内存分区</text>
+                <text x="230" y="170" text-anchor="middle" font-size="12" fill="#1d4ed8">• 页面置换算法（请求分页）</text>
+                <text x="230" y="195" text-anchor="middle" font-size="12" fill="#1d4ed8">• 段的链接、共享策略</text>
+                <text x="230" y="220" text-anchor="middle" font-size="12" fill="#1d4ed8">• 处理缺页/越界/保护中断</text>
+                <text x="230" y="245" text-anchor="middle" font-size="12" fill="#1d4ed8">• 进程切换时切换页表/段表</text>
+                <text x="230" y="270" text-anchor="middle" font-size="12" fill="#1d4ed8">• 管理交换区（外存）</text>
+                <rect x="520" y="50" width="300" height="230" rx="12" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+                <text x="670" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#065f46">硬件（MMU）</text>
+                <line x1="530" y1="95" x2="810" y2="95" stroke="#a7f3d0"/>
+                <text x="670" y="120" text-anchor="middle" font-size="12" fill="#065f46">• 自动拆分逻辑地址</text>
+                <text x="670" y="145" text-anchor="middle" font-size="12" fill="#065f46">• 越界检查（硬件电路）</text>
+                <text x="670" y="170" text-anchor="middle" font-size="12" fill="#065f46">• 查页表/段表（自动访存）</text>
+                <text x="670" y="195" text-anchor="middle" font-size="12" fill="#065f46">• TLB查询（相联存储器）</text>
+                <text x="670" y="220" text-anchor="middle" font-size="12" fill="#065f46">• 物理地址拼接/加法运算</text>
+                <text x="670" y="245" text-anchor="middle" font-size="12" fill="#065f46">• 权限检查（R/W/X位）</text>
+                <text x="670" y="270" text-anchor="middle" font-size="12" fill="#065f46">• 触发缺页中断信号</text>
+                <path d="M380 165 L520 165" stroke="#64748b" stroke-width="2" stroke-dasharray="6" fill="none"/>
+                <text x="450" y="158" text-anchor="middle" font-size="11" fill="#64748b">OS将页表始址写入PTR</text>
+                <text x="450" y="180" text-anchor="middle" font-size="11" fill="#64748b">硬件自动完成后续变换</text>
+            </svg>
+            <div class="svg-caption">图5-1：OS负责策略与管理，硬件负责速度与自动化</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title">2. 地址空间维度对比</h3>
+        <table>
+            <tr><th>管理方式</th><th>程序员视角</th><th>逻辑地址维度</th><th>物理地址维度</th><th>关键特征</th></tr>
+            <tr><td>连续分配</td><td>一维线性地址</td><td>一维</td><td>一维</td><td>基址+偏移，整体连续</td></tr>
+            <tr><td><strong>分页</strong></td><td>一维线性地址（透明）</td><td><span class="tag tag-blue">一维</span></td><td>一维（页框号拼接）</td><td>系统自动拆分页号/偏移</td></tr>
+            <tr><td><strong>分段</strong></td><td>二维（段号, 偏移）</td><td><span class="tag tag-purple">二维</span></td><td>一维（基址+偏移）</td><td>程序员/编译器显式分段</td></tr>
+            <tr><td><strong>段页式</strong></td><td>二维（段号, 页号, 偏移）</td><td><span class="tag tag-purple">二维</span></td><td>一维（页框号拼接）</td><td>二维逻辑，分页物理管理</td></tr>
+        </table>
+        <div class="highlight-box accent">
+            <strong>核心记忆点：</strong>分页对用户是「一维透明」的；分段和段页式对用户是「二维显式」的。<br>
+            无论逻辑层是几维，物理地址始终是一维的（内存是线性字节数组）。
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title">3. 三种离散分配方式终极对比</h3>
+        <table>
+            <tr><th>对比维度</th><th style="width:28%">分页</th><th style="width:28%">分段</th><th style="width:28%">段页式</th></tr>
+            <tr><td><strong>划分依据</strong></td><td>物理固定大小（如4KB）</td><td>程序逻辑意义（代码/数据/栈）</td><td>先逻辑分段，段内再分页</td></tr>
+            <tr><td><strong>段/页大小</strong></td><td>页大小固定（硬件决定）</td><td>段长不固定（程序决定）</td><td>段长不固定，页大小固定</td></tr>
+            <tr><td><strong>碎片类型</strong></td><td>内碎片（平均半页）</td><td>外碎片（紧凑开销大）</td><td>内碎片（同分页）</td></tr>
+            <tr><td><strong>逻辑地址</strong></td><td>一维（页号+偏移）</td><td>二维（段号+偏移）</td><td>二维（段号+页号+偏移）</td></tr>
+            <tr><td><strong>地址计算</strong></td><td>页框号「替换」页号，拼接偏移</td><td>段基址「加法」偏移</td><td>先查段表得页表，再查页表得框号，拼接偏移</td></tr>
+            <tr><td><strong>共享难度</strong></td><td>难（不反映逻辑，共享粒度粗）</td><td>易（按逻辑段共享）</td><td>较易（共享段内分页，稍复杂）</td></tr>
+            <tr><td><strong>保护机制</strong></td><td>页表项权限位（整页统一）</td><td>段表项权限位（按段保护）</td><td>段权限+页权限双重保护</td></tr>
+            <tr><td><strong>访存次数</strong></td><td>2次（+TLB可1次）</td><td>2次（+联想寄存器可优化）</td><td>3次（+TLB可2次）</td></tr>
+            <tr><td><strong>适用场景</strong></td><td>通用OS（Linux/Windows主流）</td><td>需强逻辑隔离（如早期Multics）</td><td>兼顾逻辑与效率（如x86段页式）</td></tr>
+        </table>
+    </div>
+</section>
+
+<!-- ==================== 交互式计算器 ==================== -->
+<section class="section" id="calc">
+    <h2 class="section-title"><div class="icon">🧮</div>交互式地址转换计算器</h2>
+    <p class="section-subtitle">输入参数，实时模拟分页/分段/段页式的地址变换过程</p>
+
+    <div class="calculator">
+        <div style="display:flex; gap:1rem; margin-bottom:1.5rem; flex-wrap:wrap;">
+            <div>
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600;">选择模式：</label>
+                <select id="calcMode" onchange="updateCalcUI()" style="padding:0.5rem; border-radius:8px; border:1px solid var(--border);">
+                    <option value="page">分页 (Paging)</option>
+                    <option value="segment">分段 (Segmentation)</option>
+                    <option value="segpage">段页式 (Segmented Paging)</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600;">逻辑地址（十进制）：</label>
+                <input type="number" id="logicAddr" value="8196" min="0" style="padding:0.5rem; border-radius:8px; border:1px solid var(--border); width:150px;">
+            </div>
+            <div id="pageSizeDiv">
+                <label style="display:block; margin-bottom:0.5rem; font-weight:600;">页大小（字节）：</label>
+                <select id="pageSize" style="padding:0.5rem; border-radius:8px; border:1px solid var(--border);">
+                    <option value="1024">1KB (2^10)</option>
+                    <option value="2048">2KB (2^11)</option>
+                    <option value="4096" selected>4KB (2^12)</option>
+                    <option value="8192">8KB (2^13)</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="pageConfig" style="margin-bottom:1rem;">
+            <label style="font-weight:600;">页表映射（页号 → 页框号）：</label>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
+                <span style="font-size:0.9rem;">页0→框</span><input type="number" id="p0" value="5" min="0" style="width:60px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">页1→框</span><input type="number" id="p1" value="2" min="0" style="width:60px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">页2→框</span><input type="number" id="p2" value="8" min="0" style="width:60px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">页3→框</span><input type="number" id="p3" value="1" min="0" style="width:60px; padding:0.3rem;">
+            </div>
+        </div>
+
+        <div id="segmentConfig" style="display:none; margin-bottom:1rem;">
+            <label style="font-weight:600;">段表（段号 → 基址, 段长）：</label>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
+                <span style="font-size:0.9rem;">段0:基址</span><input type="number" id="s0base" value="1024" min="0" style="width:70px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">段长</span><input type="number" id="s0len" value="4096" min="0" style="width:70px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">段1:基址</span><input type="number" id="s1base" value="6144" min="0" style="width:70px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">段长</span><input type="number" id="s1len" value="2048" min="0" style="width:70px; padding:0.3rem;">
+            </div>
+        </div>
+
+        <div id="segpageConfig" style="display:none; margin-bottom:1rem;">
+            <label style="font-weight:600;">段0页表（页号→页框）：</label>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
+                <span style="font-size:0.9rem;">页0→框</span><input type="number" id="sp0_0" value="3" min="0" style="width:60px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">页1→框</span><input type="number" id="sp0_1" value="7" min="0" style="width:60px; padding:0.3rem;">
+            </div>
+            <label style="font-weight:600; margin-top:0.5rem; display:block;">段1页表（页号→页框）：</label>
+            <div style="display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap;">
+                <span style="font-size:0.9rem;">页0→框</span><input type="number" id="sp1_0" value="4" min="0" style="width:60px; padding:0.3rem;">
+                <span style="font-size:0.9rem;">页1→框</span><input type="number" id="sp1_1" value="9" min="0" style="width:60px; padding:0.3rem;">
+            </div>
+        </div>
+
+        <button class="calc-btn" onclick="runCalc()">执行地址变换</button>
+
+        <div id="calcResult" class="calc-result" style="display:none;">等待计算...</div>
+    </div>
+</section>
+
+<!-- 底部 -->
+<div style="text-align:center; padding:3rem 0; color:var(--text-light); border-top:1px solid var(--border); margin-top:3rem;">
+    <p style="font-size:1rem; margin-bottom:0.5rem;">408 操作系统 —— 存储管理篇</p>
+    <p style="font-size:0.85rem;">
+        <a href="paging.html" style="color:var(--primary); text-decoration:none;">分页</a> ·
+        <a href="segmentation.html" style="color:var(--secondary); text-decoration:none;">分段</a> ·
+        <a href="seg-paging.html" style="color:var(--accent); text-decoration:none;">段页式</a>
+        | 图解 + 交互式演示
+    </p>
+</div>
+
+</div><!-- container -->
+
+<script>
+function updateCalcUI() {
+    const mode = document.getElementById('calcMode').value;
+    document.getElementById('pageConfig').style.display = mode === 'page' ? 'block' : 'none';
+    document.getElementById('segmentConfig').style.display = mode === 'segment' ? 'block' : 'none';
+    document.getElementById('segpageConfig').style.display = mode === 'segpage' ? 'block' : 'none';
+    document.getElementById('pageSizeDiv').style.display = (mode === 'page' || mode === 'segpage') ? 'block' : 'none';
+    document.getElementById('calcResult').style.display = 'none';
+}
+
+function runCalc() {
+    const mode = document.getElementById('calcMode').value;
+    const addr = parseInt(document.getElementById('logicAddr').value);
+    const resultDiv = document.getElementById('calcResult');
+    resultDiv.style.display = 'block';
+    let html = '<div style="font-weight:700; font-size:1.1rem; margin-bottom:1rem; color:var(--primary);">地址变换过程</div>';
+
+    if (mode === 'page') {
+        const pageSize = parseInt(document.getElementById('pageSize').value);
+        const pageBits = Math.log2(pageSize);
+        const pageNum = Math.floor(addr / pageSize);
+        const offset = addr % pageSize;
+        const frameMap = [parseInt(document.getElementById('p0').value), parseInt(document.getElementById('p1').value), 
+                         parseInt(document.getElementById('p2').value), parseInt(document.getElementById('p3').value)];
+        html += '<div style="margin-bottom:0.5rem;"><span style="color:var(--primary); font-weight:600;">Step 1：</span>拆分逻辑地址 ' + addr + '</div>';
+        html += '<div style="margin-left:1rem; color:var(--text-light);">页大小 = ' + pageSize + ' 字节 = 2^' + pageBits + '，故偏移占 ' + pageBits + ' 位</div>';
+        html += '<div style="margin-left:1rem;">页号 P = ' + addr + ' / ' + pageSize + ' = <strong style="color:var(--secondary);">' + pageNum + '</strong></div>';
+        html += '<div style="margin-left:1rem;">页内偏移 W = ' + addr + ' % ' + pageSize + ' = <strong style="color:var(--accent);">' + offset + '</strong></div>';
+        html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 2：</span>查页表</div>';
+        if (pageNum >= frameMap.length) {
+            html += '<div style="margin-left:1rem; color:var(--danger); font-weight:600;">页号 ' + pageNum + ' 超出页表范围！越界中断！</div>';
+        } else {
+            const frame = frameMap[pageNum];
+            html += '<div style="margin-left:1rem;">页 ' + pageNum + ' → 页框 <strong style="color:var(--secondary);">' + frame + '</strong></div>';
+            html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 3：</span>拼接物理地址</div>';
+            const phys = frame * pageSize + offset;
+            html += '<div style="margin-left:1rem;">物理地址 = ' + frame + ' × ' + pageSize + ' + ' + offset + ' = <strong style="color:var(--danger); font-size:1.1rem;">' + phys + '</strong></div>';
+        }
+    } else if (mode === 'segment') {
+        const segTable = [
+            { base: parseInt(document.getElementById('s0base').value), len: parseInt(document.getElementById('s0len').value) },
+            { base: parseInt(document.getElementById('s1base').value), len: parseInt(document.getElementById('s1len').value) }
+        ];
+        const segNum = addr >= segTable[0].len ? 1 : 0;
+        const offset = segNum === 0 ? addr : addr - segTable[0].len;
+        const seg = segTable[segNum];
+        html += '<div style="margin-bottom:0.5rem;"><span style="color:var(--primary); font-weight:600;">Step 1：</span>拆分二维地址 ' + addr + '</div>';
+        html += '<div style="margin-left:1rem;">段号 S = <strong style="color:var(--secondary);">' + segNum + '</strong>（简化模型）</div>';
+        html += '<div style="margin-left:1rem;">段内偏移 W = <strong style="color:var(--accent);">' + offset + '</strong></div>';
+        html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 2：</span>越界检查</div>';
+        if (segNum >= segTable.length) {
+            html += '<div style="margin-left:1rem; color:var(--danger); font-weight:600;">段号 ' + segNum + ' 越界！</div>';
+        } else if (offset >= seg.len) {
+            html += '<div style="margin-left:1rem; color:var(--danger); font-weight:600;">偏移 ' + offset + ' 段长 ' + seg.len + '！越界中断！</div>';
+        } else {
+            html += '<div style="margin-left:1rem; color:var(--accent);">段号合法，偏移 ' + offset + ' &lt; 段长 ' + seg.len + '，通过检查</div>';
+            html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 3：</span>计算物理地址</div>';
+            const phys = seg.base + offset;
+            html += '<div style="margin-left:1rem;">物理地址 = 基址 ' + seg.base + ' + 偏移 ' + offset + ' = <strong style="color:var(--danger); font-size:1.1rem;">' + phys + '</strong></div>';
+        }
+    } else if (mode === 'segpage') {
+        const pageSize = parseInt(document.getElementById('pageSize').value);
+        const segNum = Math.floor(addr / (2 * pageSize));
+        const remain = addr % (2 * pageSize);
+        const pageNum = Math.floor(remain / pageSize);
+        const offset = remain % pageSize;
+        const pageTables = [
+            [parseInt(document.getElementById('sp0_0').value), parseInt(document.getElementById('sp0_1').value)],
+            [parseInt(document.getElementById('sp1_0').value), parseInt(document.getElementById('sp1_1').value)]
+        ];
+        html += '<div style="margin-bottom:0.5rem;"><span style="color:var(--primary); font-weight:600;">Step 1：</span>拆分三维地址 ' + addr + '</div>';
+        html += '<div style="margin-left:1rem;">段号 S = <strong style="color:var(--secondary);">' + segNum + '</strong></div>';
+        html += '<div style="margin-left:1rem;">页号 P = <strong style="color:var(--accent);">' + pageNum + '</strong></div>';
+        html += '<div style="margin-left:1rem;">页内偏移 W = <strong style="color:var(--warning);">' + offset + '</strong></div>';
+        html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 2：</span>查段表（第1次访存）</div>';
+        if (segNum >= pageTables.length) {
+            html += '<div style="margin-left:1rem; color:var(--danger); font-weight:600;">段号 ' + segNum + ' 越界！</div>';
+        } else if (pageNum >= pageTables[segNum].length) {
+            html += '<div style="margin-left:1rem; color:var(--danger); font-weight:600;">页号 ' + pageNum + ' 超出段表长度！</div>';
+        } else {
+            html += '<div style="margin-left:1rem;">段 ' + segNum + ' 的页表中找到页 ' + pageNum + '</div>';
+            html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 3：</span>查页表（第2次访存）</div>';
+            const frame = pageTables[segNum][pageNum];
+            html += '<div style="margin-left:1rem;">页 ' + pageNum + ' → 页框 <strong style="color:var(--secondary);">' + frame + '</strong></div>';
+            html += '<div style="margin:0.75rem 0;"><span style="color:var(--primary); font-weight:600;">Step 4：</span>访问目标（第3次访存）</div>';
+            const phys = frame * pageSize + offset;
+            html += '<div style="margin-left:1rem;">物理地址 = ' + frame + ' × ' + pageSize + ' + ' + offset + ' = <strong style="color:var(--danger); font-size:1.1rem;">' + phys + '</strong></div>';
+        }
+    }
+    resultDiv.innerHTML = html;
+}
+
+// 平滑滚动
+document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        document.querySelector(this.getAttribute('href')).scrollIntoView({ behavior: 'smooth' });
+    });
+});
+</script>
+
+</body>
+</html>
