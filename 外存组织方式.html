@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>外存的组织方式 — 408 考研专题</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #f0f4f8;
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            color: #1a2332;
+        }
+
+        /* ===== 导航栏 ===== */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 62px;
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            z-index: 100;
+            padding: 0 16px;
+        }
+        .navbar .brand {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: #0b1d2e;
+            margin-right: 20px;
+            white-space: nowrap;
+        }
+        .navbar .brand span { color: #3b82f6; }
+        .nav-btn {
+            background: transparent;
+            border: none;
+            padding: 8px 18px;
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: #64748b;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .nav-btn:hover { background: #f1f5f9; color: #1a2332; }
+        .nav-btn.active {
+            background: #1e293b;
+            color: #fff;
+        }
+        .nav-btn.summary-btn { color: #7c3aed; }
+        .nav-btn.summary-btn.active { background: #7c3aed; color: #fff; }
+
+        /* ===== Page System ===== */
+        .page {
+            display: none;
+            padding: 86px 20px 60px;
+            min-height: 100vh;
+            animation: fadeIn 0.35s ease;
+        }
+        .page.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .page-inner {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        /* ===== 首页 ===== */
+        .hero {
+            text-align: center;
+            padding: 50px 0 30px;
+        }
+        .hero h1 {
+            font-size: 2.6rem;
+            color: #0b1d2e;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+        }
+        .hero h1 span { color: #3b82f6; }
+        .hero p {
+            font-size: 1.05rem;
+            color: #5a6a7a;
+            max-width: 560px;
+            margin: 0 auto 36px;
+            line-height: 1.7;
+        }
+        .index-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-top: 10px;
+        }
+        .index-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 30px 22px 24px;
+            text-align: center;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid transparent;
+        }
+        .index-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.1);
+        }
+        .index-card .icon {
+            font-size: 2.4rem;
+            font-weight: 700;
+            width: 64px;
+            height: 64px;
+            line-height: 64px;
+            border-radius: 50%;
+            margin: 0 auto 14px;
+            color: #fff;
+        }
+        .index-card .icon.c1 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .index-card .icon.c2 { background: linear-gradient(135deg, #10b981, #059669); }
+        .index-card .icon.c3 { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .index-card .icon.c4 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+        .index-card h3 { font-size: 1.15rem; margin-bottom: 6px; color: #1a2332; }
+        .index-card p  { font-size: 0.85rem; color: #64748b; line-height: 1.5; }
+
+        /* ===== 内容页通用 ===== */
+        .page-title {
+            font-size: 2rem;
+            margin-bottom: 6px;
+            letter-spacing: 2px;
+        }
+        .page-title .num {
+            display: inline-block;
+            width: 40px; height: 40px;
+            line-height: 40px;
+            border-radius: 50%;
+            color: #fff;
+            text-align: center;
+            font-size: 1.1rem;
+            margin-right: 10px;
+        }
+        .page-sub {
+            color: #5a6a7a;
+            font-size: 0.95rem;
+            margin-bottom: 28px;
+            border-bottom: 2px solid #d0d8e0;
+            padding-bottom: 14px;
+        }
+
+        .content-card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 28px 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+            margin-bottom: 24px;
+        }
+        .content-card h3 {
+            font-size: 1.1rem;
+            margin: 20px 0 10px;
+            border-left: 4px solid #3b82f6;
+            padding-left: 12px;
+        }
+        .content-card h3:first-of-type { margin-top: 0; }
+        .content-card p, .content-card li {
+            font-size: 0.93rem;
+            line-height: 1.75;
+            color: #2c3e50;
+        }
+        .content-card ul { padding-left: 20px; }
+        .content-card li { margin-bottom: 4px; }
+
+        /* SVG */
+        .svg-wrap {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 8px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+            overflow-x: auto;
+        }
+        .svg-wrap svg { max-width: 100%; height: auto; }
+        .svg-caption {
+            font-size: 0.82rem;
+            color: #64748b;
+            text-align: center;
+            margin: 2px 0 12px;
+        }
+
+        .tag {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 2px 10px;
+            border-radius: 20px;
+            margin-right: 6px;
+        }
+        .tag.pro { background: #d1fae5; color: #065f46; }
+        .tag.con { background: #fee2e2; color: #991b1b; }
+
+        .exam-box {
+            background: #fef9e7;
+            border: 1px solid #fde68a;
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin-top: 18px;
+        }
+        .exam-box strong { color: #92400e; }
+        .exam-box ul { margin-top: 4px; }
+
+        .pro-con-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+            margin-top: 10px;
+        }
+        .pro-con-grid .pro-box {
+            background: #f0fdf4;
+            border-radius: 10px;
+            padding: 14px 16px;
+            border-left: 4px solid #10b981;
+        }
+        .pro-con-grid .con-box {
+            background: #fef2f2;
+            border-radius: 10px;
+            padding: 14px 16px;
+            border-left: 4px solid #ef4444;
+        }
+        .pro-con-grid h4 { font-size: 0.95rem; margin-bottom: 6px; }
+        .pro-con-grid li { font-size: 0.88rem; }
+
+        @media (max-width: 700px) {
+            .pro-con-grid { grid-template-columns: 1fr; }
+            .navbar .brand { display: none; }
+            .nav-btn { padding: 6px 12px; font-size: 0.8rem; }
+        }
+
+        /* ===== 总结页 ===== */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            margin-top: 10px;
+        }
+        th {
+            background: #1e293b;
+            color: #fff;
+            padding: 13px 14px;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+        td {
+            padding: 11px 14px;
+            text-align: center;
+            font-size: 0.88rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        tr:last-child td { border-bottom: none; }
+        td:first-child { font-weight: 600; background: #f8fafc; text-align: left; }
+        tr:hover td { background: #f1f5f9; }
+
+        .fat-section {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px 28px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.07);
+            margin-top: 24px;
+        }
+        .fat-section h2 {
+            text-align: center;
+            font-size: 1.3rem;
+            margin-bottom: 14px;
+            color: #0b1d2e;
+        }
+        .fat-section .svg-wrap { max-width: 720px; margin: 0 auto; }
+
+        .summary-footer {
+            text-align: center;
+            margin: 40px 0 10px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ========== 导航栏 ========== -->
+<nav class="navbar">
+    <div class="brand"><span>外存</span>组织方式</div>
+    <button class="nav-btn active" data-page="index">🏠 首页</button>
+    <button class="nav-btn" data-page="page1">① 连续</button>
+    <button class="nav-btn" data-page="page2">② 链接</button>
+    <button class="nav-btn" data-page="page3">③ 索引</button>
+    <button class="nav-btn summary-btn" data-page="summary">📊 总结</button>
+</nav>
+
+<!-- ================================================================ -->
+<!-- PAGE 0: 首页 -->
+<!-- ================================================================ -->
+<div class="page active" id="page-index">
+    <div class="page-inner">
+        <div class="hero">
+            <h1><span>外存</span>的组织方式</h1>
+            <p>文件在磁盘上的三种物理组织方式 —— 连续分配、链接分配、索引分配。<br>408 操作系统核心考点，涵盖原理、优缺点、典型应用与计算。</p>
+        </div>
+        <div class="index-grid">
+            <div class="index-card" onclick="switchPage('page1')">
+                <div class="icon c1">①</div>
+                <h3>连续组织方式</h3>
+                <p>文件占用连续的磁盘块，简单高效但有外部碎片。</p>
+            </div>
+            <div class="index-card" onclick="switchPage('page2')">
+                <div class="icon c2">②</div>
+                <h3>链接组织方式</h3>
+                <p>文件块散落分布，通过指针链接，消除碎片但仅支持顺序访问。</p>
+            </div>
+            <div class="index-card" onclick="switchPage('page3')">
+                <div class="icon c3">③</div>
+                <h3>索引组织方式</h3>
+                <p>索引块管理所有数据块指针，既支持顺序也支持随机访问。</p>
+            </div>
+            <div class="index-card" onclick="switchPage('summary')">
+                <div class="icon c4">📊</div>
+                <h3>总结对比</h3>
+                <p>三种方式全方位对比表 + FAT + 混合索引 + 408 计算题公式。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 1: 连续组织方式 -->
+<!-- ================================================================ -->
+<div class="page" id="page-page1">
+    <div class="page-inner">
+        <h2 class="page-title"><span class="num" style="background:linear-gradient(135deg,#3b82f6,#2563eb);">①</span>连续组织方式</h2>
+        <div class="page-sub">Continuous Allocation — 顺序访问 / 随机访问均高效，但有外部碎片</div>
+
+        <div class="content-card">
+            <div class="svg-wrap">
+                <svg viewBox="0 0 500 180" width="500" height="180">
+                    <rect x="20" y="10" width="460" height="130" rx="10" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.5"/>
+                    <text x="250" y="6" text-anchor="middle" font-size="12" fill="#64748b">磁盘块号</text>
+                    <!-- 文件 A 连续区域 -->
+                    <rect x="30" y="28" width="130" height="48" rx="6" fill="#3b82f6" opacity="0.2" stroke="#3b82f6" stroke-width="2"/>
+                    <text x="95" y="54" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e40af">文件 A</text>
+                    <text x="95" y="70" text-anchor="middle" font-size="11" fill="#1e40af">块 3 ~ 块 7</text>
+                    <!-- 其他文件 -->
+                    <rect x="170" y="28" width="40" height="48" rx="4" fill="#94a3b8" opacity="0.3" stroke="#94a3b8" stroke-width="1"/>
+                    <text x="190" y="56" text-anchor="middle" font-size="12" fill="#475569">B</text>
+                    <!-- 文件 C -->
+                    <rect x="220" y="28" width="100" height="48" rx="6" fill="#3b82f6" opacity="0.2" stroke="#3b82f6" stroke-width="2"/>
+                    <text x="270" y="54" text-anchor="middle" font-size="14" font-weight="bold" fill="#1e40af">文件 C</text>
+                    <text x="270" y="70" text-anchor="middle" font-size="11" fill="#1e40af">块 9 ~ 块 12</text>
+                    <!-- 空闲 -->
+                    <rect x="330" y="28" width="140" height="48" rx="4" fill="#d1d5db" stroke="#9ca3af" stroke-width="1" stroke-dasharray="4,3"/>
+                    <text x="400" y="56" text-anchor="middle" font-size="11" fill="#6b7280">空闲块</text>
+
+                    <!-- 目录项 FCB -->
+                    <rect x="40" y="96" width="420" height="36" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,3"/>
+                    <text x="250" y="110" text-anchor="middle" font-size="11" font-weight="bold" fill="#334155">目录项 FCB</text>
+                    <text x="250" y="126" text-anchor="middle" font-size="10" fill="#64748b">文件名 · 起始块号 · 块数</text>
+                </svg>
+            </div>
+            <div class="svg-caption">连续分配：每个文件占据一组连续的物理磁盘块，目录项记录起始块号和块数</div>
+
+            <h3>基本思想</h3>
+            <p>为每个文件分配一组<strong>连续的磁盘块</strong>。文件目录（FCB）中只需记录<strong>起始块号</strong>和<strong>文件长度（块数）</strong>。例如文件 A 从块 3 开始，占 5 块，则其占据块 3 ~ 块 7。</p>
+            <p>文件访问时，第 K 块对应的物理块号 = <strong>起始块号 + K</strong>，因此支持高效的<strong>随机访问</strong>。</p>
+
+            <div class="pro-con-grid">
+                <div class="pro-box">
+                    <h4>✅ 优点</h4>
+                    <ul>
+                        <li><strong>顺序访问快</strong> —— 磁头移动距离小，寻道时间短</li>
+                        <li><strong>支持随机访问</strong> —— 起始块 + 偏移，一步算出物理块号</li>
+                        <li><strong>目录项简单</strong> —— 只需首块号和块数</li>
+                        <li><strong>无额外存储开销</strong> —— 无需指针或索引块</li>
+                    </ul>
+                </div>
+                <div class="con-box">
+                    <h4>❌ 缺点</h4>
+                    <ul>
+                        <li><strong>产生外部碎片</strong> —— 反复增删文件后，空闲块不连续</li>
+                        <li><strong>需预先知道文件大小</strong> —— 不适合动态增长的文件</li>
+                        <li><strong>扩展困难</strong> —— 若预留空间不足需整体搬迁，代价大</li>
+                        <li><strong>存在"碎片整理"需求</strong> —— 需定期紧缩磁盘</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="exam-box">
+                <strong>📌 408 考点</strong>
+                <ul>
+                    <li><strong>磁盘块号计算</strong>：物理块号 = 起始块号 + (字节偏移 / 块大小)</li>
+                    <li><strong>外部碎片 vs 内部碎片</strong>：连续分配产生外部碎片（磁盘块间的空隙）</li>
+                    <li><strong>文件扩展开销</strong>：预留空间不足时需整体迁移，属于高开销操作</li>
+                    <li><strong>紧凑（Compaction）</strong>：解决外部碎片的手段，但需消耗大量时间</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 2: 链接组织方式 -->
+<!-- ================================================================ -->
+<div class="page" id="page-page2">
+    <div class="page-inner">
+        <h2 class="page-title"><span class="num" style="background:linear-gradient(135deg,#10b981,#059669);">②</span>链接组织方式</h2>
+        <div class="page-sub">Linked Allocation — 消除外部碎片但仅支持顺序访问</div>
+
+        <div class="content-card">
+            <div class="svg-wrap">
+                <svg viewBox="0 0 500 240" width="500" height="240">
+                    <!-- 散落的文件块 -->
+                    <rect x="20"  y="20" width="56" height="48" rx="6" fill="#10b981" opacity="0.18" stroke="#10b981" stroke-width="2"/>
+                    <text x="48" y="40" text-anchor="middle" font-size="11" font-weight="bold" fill="#065f46">块 3</text>
+                    <text x="48" y="56" text-anchor="middle" font-size="9" fill="#065f46">→ 块 7</text>
+
+                    <rect x="160" y="6" width="56" height="48" rx="6" fill="#10b981" opacity="0.18" stroke="#10b981" stroke-width="2"/>
+                    <text x="188" y="26" text-anchor="middle" font-size="11" font-weight="bold" fill="#065f46">块 7</text>
+                    <text x="188" y="42" text-anchor="middle" font-size="9" fill="#065f46">→ 块 11</text>
+
+                    <rect x="300" y="30" width="56" height="48" rx="6" fill="#10b981" opacity="0.18" stroke="#10b981" stroke-width="2"/>
+                    <text x="328" y="50" text-anchor="middle" font-size="11" font-weight="bold" fill="#065f46">块 11</text>
+                    <text x="328" y="66" text-anchor="middle" font-size="9" fill="#065f46">→ 块 15</text>
+
+                    <rect x="70"  y="100" width="56" height="48" rx="6" fill="#10b981" opacity="0.18" stroke="#10b981" stroke-width="2"/>
+                    <text x="98" y="120" text-anchor="middle" font-size="11" font-weight="bold" fill="#065f46">块 15</text>
+                    <text x="98" y="136" text-anchor="middle" font-size="9" fill="#065f46">→ 块 20</text>
+
+                    <rect x="240" y="110" width="56" height="48" rx="6" fill="#10b981" opacity="0.18" stroke="#10b981" stroke-width="2"/>
+                    <text x="268" y="130" text-anchor="middle" font-size="11" font-weight="bold" fill="#065f46">块 20</text>
+                    <text x="268" y="146" text-anchor="middle" font-size="9" fill="#065f46">→ null</text>
+
+                    <!-- 箭头 -->
+                    <defs>
+                        <marker id="ga" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                            <path d="M0,0 L8,4 L0,8Z" fill="#10b981"/>
+                        </marker>
+                    </defs>
+                    <line x1="76" y1="44" x2="158" y2="34" stroke="#10b981" stroke-width="2" marker-end="url(#ga)"/>
+                    <line x1="216" y1="34" x2="298" y2="48" stroke="#10b981" stroke-width="2" marker-end="url(#ga)"/>
+                    <line x1="328" y1="78" x2="126" y2="112" stroke="#10b981" stroke-width="2" marker-end="url(#ga)"/>
+                    <line x1="126" y1="136" x2="238" y2="138" stroke="#10b981" stroke-width="2" marker-end="url(#ga)"/>
+
+                    <!-- 目录项 -->
+                    <rect x="80" y="180" width="340" height="48" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,3"/>
+                    <text x="250" y="200" text-anchor="middle" font-size="11" font-weight="bold" fill="#334155">目录项 FCB · 文件名 · 首块号（3） · 末块号（20）</text>
+                    <text x="250" y="220" text-anchor="middle" font-size="10" fill="#64748b">文件 A 的块链：3 → 7 → 11 → 15 → 20</text>
+                </svg>
+            </div>
+            <div class="svg-caption">链接分配（隐式链接）：每个磁盘块包含指向下一个块的指针，形成链表</div>
+
+            <h3>基本思想</h3>
+            <p>文件可存储在<strong>不连续</strong>的磁盘块中。每个数据块末尾设有<strong>指向下一个数据块的指针</strong>（4~8 字节）。FCB 中记录<strong>首块号</strong>和<strong>末块号</strong>。</p>
+            <p>分为两种形式：</p>
+            <ul>
+                <li><strong>隐式链接</strong>：指针存放在每个数据块末尾，读取时必须顺链查找</li>
+                <li><strong>显式链接</strong>（FAT）：所有指针集中到一张 <strong>FAT 表</strong>（见总结页），常驻内存</li>
+            </ul>
+
+            <div class="pro-con-grid">
+                <div class="pro-box">
+                    <h4>✅ 优点</h4>
+                    <ul>
+                        <li><strong>消除外部碎片</strong>——任何空闲块都可被利用</li>
+                        <li><strong>文件可动态增长</strong>——只需追加新块，修改末指针</li>
+                        <li><strong>无需预先声明文件大小</strong></li>
+                    </ul>
+                </div>
+                <div class="con-box">
+                    <h4>❌ 缺点</h4>
+                    <ul>
+                        <li><strong>仅支持顺序访问</strong>——随机访问需顺链遍历，效率极低</li>
+                        <li><strong>指针占用存储空间</strong>——每个块需若干字节存指针</li>
+                        <li><strong>可靠性差</strong>——一个指针丢失则后续全部丢失</li>
+                        <li><strong>隐式链接需要多次磁盘 I/O</strong>——访问第 K 块需读 K 次磁盘</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="exam-box">
+                <strong>📌 408 考点</strong>
+                <ul>
+                    <li><strong>隐式链接 vs 显式链接</strong> —— 指针位置不同（块内 vs FAT 表），决定随机访问能力</li>
+                    <li><strong>随机访问性能</strong> —— 隐式链接访问第 K 块需要 K 次磁盘 I/O（最坏情况）</li>
+                    <li><strong>指针空间计算</strong> —— 设块大小 1KB，指针 4B，实际可用数据为 1020B，利用率约 99.6%</li>
+                    <li><strong>最大文件大小</strong> —— 受磁盘块数量和指针大小限制</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 3: 索引组织方式 -->
+<!-- ================================================================ -->
+<div class="page" id="page-page3">
+    <div class="page-inner">
+        <h2 class="page-title"><span class="num" style="background:linear-gradient(135deg,#f59e0b,#d97706);">③</span>索引组织方式</h2>
+        <div class="page-sub">Indexed Allocation — 既有顺序访问又有随机访问，但需索引块开销</div>
+
+        <div class="content-card">
+            <div class="svg-wrap">
+                <svg viewBox="0 0 520 240" width="520" height="240">
+                    <!-- 索引块 -->
+                    <rect x="180" y="10" width="140" height="64" rx="8" fill="#f59e0b" opacity="0.22" stroke="#f59e0b" stroke-width="2"/>
+                    <text x="250" y="35" text-anchor="middle" font-size="13" font-weight="bold" fill="#92400e">索引块</text>
+                    <text x="250" y="54" text-anchor="middle" font-size="10" fill="#92400e">0→块3  1→块7</text>
+                    <text x="250" y="68" text-anchor="middle" font-size="10" fill="#92400e">2→块11 3→块15</text>
+
+                    <!-- 数据块 -->
+                    <rect x="10"   y="124" width="60" height="44" rx="5" fill="#f59e0b" opacity="0.14" stroke="#f59e0b" stroke-width="1.5"/>
+                    <text x="40" y="150" text-anchor="middle" font-size="12" fill="#92400e">块 3</text>
+                    <rect x="110" y="124" width="60" height="44" rx="5" fill="#f59e0b" opacity="0.14" stroke="#f59e0b" stroke-width="1.5"/>
+                    <text x="140" y="150" text-anchor="middle" font-size="12" fill="#92400e">块 7</text>
+                    <rect x="210" y="124" width="60" height="44" rx="5" fill="#f59e0b" opacity="0.14" stroke="#f59e0b" stroke-width="1.5"/>
+                    <text x="240" y="150" text-anchor="middle" font-size="12" fill="#92400e">块 11</text>
+                    <rect x="310" y="124" width="60" height="44" rx="5" fill="#f59e0b" opacity="0.14" stroke="#f59e0b" stroke-width="1.5"/>
+                    <text x="340" y="150" text-anchor="middle" font-size="12" fill="#92400e">块 15</text>
+                    <rect x="410" y="124" width="60" height="44" rx="5" fill="#d1d5db" stroke="#9ca3af" stroke-width="1" stroke-dasharray="3,2"/>
+                    <text x="440" y="150" text-anchor="middle" font-size="10" fill="#6b7280">...</text>
+
+                    <!-- 连线 -->
+                    <defs>
+                        <marker id="oa" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                            <path d="M0,0 L8,4 L0,8Z" fill="#d97706"/>
+                        </marker>
+                    </defs>
+                    <line x1="210" y1="74" x2="40"  y2="122" stroke="#d97706" stroke-width="1.5" marker-end="url(#oa)"/>
+                    <line x1="230" y1="74" x2="140" y2="122" stroke="#d97706" stroke-width="1.5" marker-end="url(#oa)"/>
+                    <line x1="260" y1="74" x2="240" y2="122" stroke="#d97706" stroke-width="1.5" marker-end="url(#oa)"/>
+                    <line x1="280" y1="74" x2="340" y2="122" stroke="#d97706" stroke-width="1.5" marker-end="url(#oa)"/>
+
+                    <!-- 目录项 -->
+                    <rect x="90" y="190" width="340" height="38" rx="6" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,3"/>
+                    <text x="260" y="214" text-anchor="middle" font-size="11" font-weight="bold" fill="#334155">目录项 FCB → 指向索引块（记录索引块号）</text>
+                </svg>
+            </div>
+            <div class="svg-caption">索引分配：索引块集中存放所有数据块指针，目录项只需指向索引块</div>
+
+            <h3>基本思想</h3>
+            <p>为每个文件分配一个<strong>索引块</strong>，该块存放所有数据块的<strong>磁盘地址指针数组</strong>。FCB 中记录<strong>索引块号</strong>。读取文件时，先读索引块，再根据索引读取数据块。</p>
+            <p>支持<strong>多级索引</strong>来解决大文件问题：</p>
+            <ul>
+                <li><strong>单级索引</strong>：一个索引块指向多个数据块</li>
+                <li><strong>二级索引</strong>：索引块指向一级索引块，一级索引块再指向数据块</li>
+                <li><strong>三级索引</strong>：以此类推，支持极大文件</li>
+                <li><strong>混合索引</strong>（Unix inode）：直接寻址 + 单级 + 二级 + 三级，见总结页</li>
+            </ul>
+
+            <div class="pro-con-grid">
+                <div class="pro-box">
+                    <h4>✅ 优点</h4>
+                    <ul>
+                        <li><strong>既支持顺序访问，也支持随机访问</strong></li>
+                        <li><strong>文件可动态增长</strong>——只需在索引块中添加新指针</li>
+                        <li><strong>无外部碎片</strong>——离散存储</li>
+                        <li><strong>通过多级索引支持超大文件</strong></li>
+                    </ul>
+                </div>
+                <div class="con-box">
+                    <h4>❌ 缺点</h4>
+                    <ul>
+                        <li><strong>索引块占用额外空间</strong></li>
+                        <li><strong>小文件也需要整个索引块</strong>——空间利用率低</li>
+                        <li><strong>大文件多级索引增加 I/O 次数</strong></li>
+                        <li><strong>单级索引有文件大小上限</strong>——最大文件 = 索引块指针数 × 块大小</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="exam-box">
+                <strong>📌 408 考点</strong>
+                <ul>
+                    <li><strong>最大文件大小计算</strong>：单级索引 = (块大小 / 指针大小) × 块大小</li>
+                    <li><strong>多级索引访问次数</strong>：二级索引访问第 K 块需 3 次 I/O（索引块 + 一级间接块 + 数据块）</li>
+                    <li><strong>混合索引</strong>：直接块 + 一级间接 + 二级间接 + 三级间接的组合寻址能力</li>
+                    <li><strong>磁盘 I/O 次数分析</strong>：给定文件大小，计算访问特定字节的 I/O 次数</li>
+                    <li><strong>典型系统</strong>：Unix/Linux ext 系列文件系统</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================ -->
+<!-- PAGE 4: 总结页 -->
+<!-- ================================================================ -->
+<div class="page" id="page-summary">
+    <div class="page-inner">
+        <h2 class="page-title"><span class="num" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed);">📊</span>总结与对比</h2>
+        <div class="page-sub">三种方式全方位对比 + FAT 显式链接 + 混合索引 + 408 计算指南</div>
+
+        <!-- 对比表 -->
+        <div class="content-card">
+            <h3>三种组织方式对比</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:16%;">比较维度</th>
+                        <th style="width:28%;">连续分配</th>
+                        <th style="width:28%;">链接分配</th>
+                        <th style="width:28%;">索引分配</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>磁盘块连续性</td>
+                        <td>✅ 连续</td>
+                        <td>❌ 离散</td>
+                        <td>❌ 离散</td>
+                    </tr>
+                    <tr>
+                        <td>目录项内容</td>
+                        <td>起始块号 + 块数</td>
+                        <td>首块号 + 末块号</td>
+                        <td>索引块指针</td>
+                    </tr>
+                    <tr>
+                        <td>顺序访问性能</td>
+                        <td>⭐ 优（磁头移动少）</td>
+                        <td>⭐ 优（顺链读）</td>
+                        <td>⭐ 优（索引连续读）</td>
+                    </tr>
+                    <tr>
+                        <td>随机访问性能</td>
+                        <td>⭐ 优（直接计算）</td>
+                        <td>❌ 差（需要 K 次 I/O）</td>
+                        <td>⭐ 优（查索引块）</td>
+                    </tr>
+                    <tr>
+                        <td>文件动态扩展</td>
+                        <td>❌ 困难（需整体搬迁）</td>
+                        <td>✅ 容易（追加块）</td>
+                        <td>✅ 容易（增索引项）</td>
+                    </tr>
+                    <tr>
+                        <td>外部碎片</td>
+                        <td>❌ 有</td>
+                        <td>✅ 无</td>
+                        <td>✅ 无</td>
+                    </tr>
+                    <tr>
+                        <td>额外存储开销</td>
+                        <td>无</td>
+                        <td>指针（每块 4~8B）</td>
+                        <td>索引块</td>
+                    </tr>
+                    <tr>
+                        <td>小文件空间效率</td>
+                        <td>⭐ 高</td>
+                        <td>⭐ 较高</td>
+                        <td>❌ 低（浪费索引块）</td>
+                    </tr>
+                    <tr>
+                        <td>可靠性</td>
+                        <td>⭐ 较高</td>
+                        <td>❌ 较差（指针易丢）</td>
+                        <td>⭐ 较高</td>
+                    </tr>
+                    <tr>
+                        <td>典型系统</td>
+                        <td>CD-ROM、DVD</td>
+                        <td>FAT12/16/32</td>
+                        <td>Unix / Linux ext2/3/4</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- FAT 显式链接 -->
+        <div class="fat-section">
+            <h2>FAT（文件分配表）—— 显式链接</h2>
+            <p style="text-align:center;color:#475569;margin-bottom:14px;">
+                FAT（File Allocation Table）是<strong>链接分配</strong>的优化版本，将所有指针集中到一张表中，常驻内存。
+            </p>
+<div class="svg-wrap">
+                <svg viewBox="0 0 760 260" width="760" height="260">
+                    <defs>
+                        <marker id="ga2" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                            <path d="M0,0 L8,4 L0,8Z" fill="#059669"/>
+                        </marker>
+                    </defs>
+
+                    <!-- 标题 -->
+                    <text x="40" y="24" font-size="14" font-weight="bold" fill="#059669">
+                        FAT 表（内存中）
+                    </text>
+
+                    <!-- 左列：块号 -->
+                    <!-- row1 -->
+                    <rect x="20" y="40" width="42" height="30" rx="3"
+                          fill="#10b981" opacity="0.25"
+                          stroke="#10b981" stroke-width="1.5"/>
+                    <text x="41" y="59" text-anchor="middle"
+                          font-size="10" font-weight="bold" fill="#065f46">块0</text>
+
+                    <!-- row2 -->
+                    <rect x="20" y="72" width="42" height="30" rx="3"
+                          fill="#10b981" opacity="0.25"
+                          stroke="#10b981" stroke-width="1.5"/>
+                    <text x="41" y="91" text-anchor="middle"
+                          font-size="10" font-weight="bold" fill="#065f46">块1</text>
+
+                    <!-- row3 -->
+                    <rect x="20" y="104" width="42" height="30" rx="3"
+                          fill="#10b981" opacity="0.25"
+                          stroke="#10b981" stroke-width="1.5"/>
+                    <text x="41" y="123" text-anchor="middle"
+                          font-size="10" font-weight="bold" fill="#065f46">块2</text>
+
+                    <!-- row4 -->
+                    <rect x="20" y="136" width="42" height="30" rx="3"
+                          fill="#10b981" opacity="0.25"
+                          stroke="#10b981" stroke-width="1.5"/>
+                    <text x="41" y="155" text-anchor="middle"
+                          font-size="10" font-weight="bold" fill="#065f46">块3</text>
+
+                    <!-- row5 -->
+                    <rect x="20" y="168" width="42" height="30" rx="3"
+                          fill="#10b981" opacity="0.25"
+                          stroke="#10b981" stroke-width="1.5"/>
+                    <text x="41" y="187" text-anchor="middle"
+                          font-size="10" font-weight="bold" fill="#065f46">块4</text>
+
+                    <!-- FAT 值 -->
+                    <rect x="64" y="40" width="52" height="30" rx="3"
+                          fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+                    <text x="90" y="59" text-anchor="middle"
+                          font-size="10" fill="#065f46">-1</text>
+
+                    <rect x="64" y="72" width="52" height="30" rx="3"
+                          fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+                    <text x="90" y="91" text-anchor="middle"
+                          font-size="10" fill="#065f46">3</text>
+
+                    <rect x="64" y="104" width="52" height="30" rx="3"
+                          fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+                    <text x="90" y="123" text-anchor="middle"
+                          font-size="10" fill="#065f46">-1</text>
+
+                    <rect x="64" y="136" width="52" height="30" rx="3"
+                          fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+                    <text x="90" y="155" text-anchor="middle"
+                          font-size="10" fill="#065f46">7</text>
+
+                    <rect x="64" y="168" width="52" height="30" rx="3"
+                          fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+                    <text x="90" y="187" text-anchor="middle"
+                          font-size="10" fill="#065f46">-1</text>
+
+                    <!-- 说明 -->
+                    <text x="135" y="59" font-size="10" fill="#475569">空闲</text>
+                    <text x="135" y="91" font-size="10" fill="#475569">文件A：1 → 3</text>
+                    <text x="135" y="123" font-size="10" fill="#475569">文件B结束</text>
+                    <text x="135" y="155" font-size="10" fill="#475569">文件A：3 → 7</text>
+                    <text x="135" y="187" font-size="10" fill="#475569">文件A结束</text>
+
+                    <!-- 右侧 -->
+                    <text x="360" y="24" font-size="14"
+                          font-weight="bold" fill="#059669">
+                        磁盘数据块
+                    </text>
+
+                    <!-- 数据块水平排列 -->
+                    <rect x="340" y="90" width="70" height="50" rx="6"
+                          fill="#10b981" opacity="0.12"
+                          stroke="#10b981" stroke-width="1.6"/>
+                    <text x="375" y="119" text-anchor="middle"
+                          font-size="11" fill="#065f46">块1</text>
+
+                    <rect x="470" y="90" width="70" height="50" rx="6"
+                          fill="#10b981" opacity="0.12"
+                          stroke="#10b981" stroke-width="1.6"/>
+                    <text x="505" y="119" text-anchor="middle"
+                          font-size="11" fill="#065f46">块3</text>
+
+                    <rect x="600" y="90" width="70" height="50" rx="6"
+                          fill="#10b981" opacity="0.12"
+                          stroke="#10b981" stroke-width="1.6"/>
+                    <text x="635" y="119" text-anchor="middle"
+                          font-size="11" fill="#065f46">块7</text>
+
+                    <!-- 数据块链接 -->
+                    <line x1="410" y1="115" x2="470" y2="115"
+                          stroke="#059669" stroke-width="2"
+                          marker-end="url(#ga2)"/>
+
+                    <line x1="540" y1="115" x2="600" y2="115"
+                          stroke="#059669" stroke-width="2"
+                          marker-end="url(#ga2)"/>
+
+                    <!-- FAT 到数据块映射 -->
+                    <line x1="116" y1="87" x2="340" y2="115"
+                          stroke="#059669"
+                          stroke-width="1.2"
+                          stroke-dasharray="4,3"/>
+
+                    <line x1="116" y1="151" x2="470" y2="115"
+                          stroke="#059669"
+                          stroke-width="1.2"
+                          stroke-dasharray="4,3"/>
+                </svg>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px;">
+                <div style="background:#f0fdf4;border-radius:10px;padding:14px;">
+                    <strong style="color:#065f46;">FAT 优点</strong>
+                    <ul style="margin-top:6px;">
+                        <li>FAT 表常驻<strong>内存</strong>，查链接关系无需读磁盘</li>
+                        <li>支持<strong>随机访问</strong>（查 FAT 表可直接算出任意块位置）</li>
+                        <li>无外部碎片，文件可动态增长</li>
+                    </ul>
+                </div>
+                <div style="background:#fef2f2;border-radius:10px;padding:14px;">
+                    <strong style="color:#991b1b;">FAT 缺点</strong>
+                    <ul style="margin-top:6px;">
+                        <li>FAT 表占用<strong>内存空间</strong>（磁盘越大 FAT 越大）</li>
+                        <li>FAT 表<strong>损坏</strong>将导致大量数据丢失</li>
+                        <li>大文件仍需多次查表（逻辑上仍是链表）</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 混合索引 -->
+        <div class="fat-section" style="margin-top:24px;">
+            <h2>混合索引（Unix inode）</h2>
+            <p style="text-align:center;color:#475569;margin-bottom:14px;">
+                结合<strong>直接寻址</strong> + <strong>单级间接</strong> + <strong>二级间接</strong> + <strong>三级间接</strong>，平衡小文件效率与大文件支持。
+            </p>
+            <div class="svg-wrap">
+                <svg viewBox="0 0 700 280" width="700" height="280">
+                    <defs>
+                        <marker id="as" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                            <path d="M0,0 L6,3 L0,6Z" fill="#d97706"/>
+                        </marker>
+                    </defs>
+                    <!-- inode -->
+                    <rect x="20" y="10" width="130" height="260" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+                    <text x="85" y="32" text-anchor="middle" font-size="13" font-weight="bold" fill="#92400e">inode</text>
+                    <rect x="30" y="48" width="110" height="22" rx="3" fill="#f59e0b" opacity="0.2" stroke="#f59e0b" stroke-width="1"/>
+                    <text x="85" y="63" text-anchor="middle" font-size="9" fill="#92400e">i.addr[0~4] 直接</text>
+                    <rect x="30" y="74" width="110" height="22" rx="3" fill="#fb923c" opacity="0.2" stroke="#fb923c" stroke-width="1"/>
+                    <text x="85" y="89" text-anchor="middle" font-size="9" fill="#9a3412">i.addr[5] 一级间接</text>
+                    <rect x="30" y="100" width="110" height="22" rx="3" fill="#ea580c" opacity="0.2" stroke="#ea580c" stroke-width="1"/>
+                    <text x="85" y="115" text-anchor="middle" font-size="9" fill="#9a3412">i.addr[6] 二级间接</text>
+                    <rect x="30" y="126" width="110" height="22" rx="3" fill="#dc2626" opacity="0.2" stroke="#dc2626" stroke-width="1"/>
+                    <text x="85" y="141" text-anchor="middle" font-size="9" fill="#991b1b">i.addr[7] 三级间接</text>
+
+                    <!-- 直接数据块 -->
+                    <rect x="200" y="20" width="40" height="30" rx="3" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1"/>
+                    <text x="220" y="40" text-anchor="middle" font-size="9" fill="#92400e">数据</text>
+                    <rect x="200" y="55" width="40" height="30" rx="3" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1"/>
+                    <text x="220" y="75" text-anchor="middle" font-size="9" fill="#92400e">数据</text>
+                    <rect x="200" y="90" width="40" height="30" rx="3" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1"/>
+                    <text x="220" y="110" text-anchor="middle" font-size="9" fill="#92400e">数据</text>
+                    <rect x="200" y="125" width="40" height="30" rx="3" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1"/>
+                    <text x="220" y="145" text-anchor="middle" font-size="9" fill="#92400e">数据</text>
+                    <rect x="200" y="160" width="40" height="30" rx="3" fill="#f59e0b" opacity="0.12" stroke="#f59e0b" stroke-width="1"/>
+                    <text x="220" y="180" text-anchor="middle" font-size="9" fill="#92400e">数据</text>
+
+                    <!-- 连线：inode → 直接数据块 -->
+                    <line x1="150" y1="59" x2="198" y2="35" stroke="#f59e0b" stroke-width="1.2" marker-end="url(#as)"/>
+                    <line x1="150" y1="59" x2="198" y2="65" stroke="#f59e0b" stroke-width="1.2" marker-end="url(#as)"/>
+                    <line x1="150" y1="59" x2="198" y2="100" stroke="#f59e0b" stroke-width="1.2" marker-end="url(#as)"/>
+                    <line x1="150" y1="59" x2="198" y2="137" stroke="#f59e0b" stroke-width="1.2" marker-end="url(#as)"/>
+                    <line x1="150" y1="59" x2="198" y2="172" stroke="#f59e0b" stroke-width="1.2" marker-end="url(#as)"/>
+
+                    <!-- 一级间接块 -->
+                    <rect x="300" y="70" width="50" height="40" rx="4" fill="#fb923c" opacity="0.2" stroke="#fb923c" stroke-width="1.5"/>
+                    <text x="325" y="92" text-anchor="middle" font-size="9" font-weight="bold" fill="#9a3412">1级间接</text>
+                    <rect x="400" y="30" width="36" height="24" rx="2" fill="#fb923c" opacity="0.12" stroke="#fb923c" stroke-width="1"/>
+                    <text x="418" y="47" text-anchor="middle" font-size="8" fill="#9a3412">数据</text>
+                    <rect x="400" y="58" width="36" height="24" rx="2" fill="#fb923c" opacity="0.12" stroke="#fb923c" stroke-width="1"/>
+                    <text x="418" y="75" text-anchor="middle" font-size="8" fill="#9a3412">数据</text>
+                    <rect x="400" y="86" width="36" height="24" rx="2" fill="#fb923c" opacity="0.12" stroke="#fb923c" stroke-width="1"/>
+                    <text x="418" y="103" text-anchor="middle" font-size="8" fill="#9a3412">...</text>
+
+                    <!-- 连线：inode → 一级间接块 / 一级间接块 → 数据 -->
+                    <line x1="150" y1="85" x2="298" y2="90" stroke="#fb923c" stroke-width="1.2" marker-end="url(#as)"/>
+                    <line x1="350" y1="90" x2="398" y2="45" stroke="#fb923c" stroke-width="1" stroke-dasharray="2,2" marker-end="url(#as)"/>
+                    <line x1="350" y1="90" x2="398" y2="73" stroke="#fb923c" stroke-width="1" stroke-dasharray="2,2" marker-end="url(#as)"/>
+
+                    <!-- 二级间接块 -->
+                    <rect x="300" y="160" width="50" height="40" rx="4" fill="#ea580c" opacity="0.2" stroke="#ea580c" stroke-width="1.5"/>
+                    <text x="325" y="182" text-anchor="middle" font-size="9" font-weight="bold" fill="#7c2d12">2级间接</text>
+                    <rect x="400" y="140" width="36" height="24" rx="2" fill="#ea580c" opacity="0.12" stroke="#ea580c" stroke-width="0.8"/>
+                    <text x="418" y="157" text-anchor="middle" font-size="8" fill="#7c2d12">1级</text>
+                    <rect x="400" y="168" width="36" height="24" rx="2" fill="#ea580c" opacity="0.12" stroke="#ea580c" stroke-width="0.8"/>
+                    <text x="418" y="185" text-anchor="middle" font-size="8" fill="#7c2d12">1级</text>
+                    <rect x="400" y="196" width="36" height="24" rx="2" fill="#ea580c" opacity="0.12" stroke="#ea580c" stroke-width="0.8"/>
+                    <text x="418" y="213" text-anchor="middle" font-size="8" fill="#7c2d12">...</text>
+
+                    <!-- 连线：inode → 二级间接块 -->
+                    <line x1="150" y1="111" x2="298" y2="180" stroke="#ea580c" stroke-width="1.2" marker-end="url(#as)"/>
+                </svg>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px;">
+                <div>
+                    <strong style="color:#92400e;">设计思想</strong>
+                    <ul style="margin-top:6px;">
+                        <li>前 5 个地址<strong>直接</strong>指向数据块（小文件零间接，零 I/O 开销）</li>
+                        <li>地址[5] 指向<strong>一级间接块</strong>，扩展文件大小</li>
+                        <li>地址[6] 指向<strong>二级间接块</strong>，再指向一级间接块</li>
+                        <li>地址[7] 指向<strong>三级间接块</strong>，支持超大文件</li>
+                    </ul>
+                </div>
+                <div>
+                    <strong style="color:#92400e;">408 高频计算题公式</strong>
+                    <ul style="margin-top:6px;">
+                        <li>直接块可访问文件大小 = 5 × 块大小</li>
+                        <li>一级间接可访问 = (块大小 / 指针大小) × 块大小</li>
+                        <li>二级间接可访问 = (块大小 / 指针大小)² × 块大小</li>
+                        <li>三级间接可访问 = (块大小 / 指针大小)³ × 块大小</li>
+                        <li>最大文件大小 = 直接 + 一级 + 二级 + 三级</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- 408 计算指南 -->
+        <div class="content-card" style="margin-top:24px;">
+            <h3>408 计算题快速指南</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:25%;">题型</th>
+                        <th>公式 / 方法</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>连续分配物理块号</td>
+                        <td>物理块号 = 起始块号 + ⌊(目标字节偏移) / 块大小⌋</td>
+                    </tr>
+                    <tr>
+                        <td>链接分配访问第 K 块</td>
+                        <td>隐式链接：K 次磁盘 I/O；显式链接（FAT）：2 次 I/O（查 FAT + 读数据）</td>
+                    </tr>
+                    <tr>
+                        <td>单级索引最大文件</td>
+                        <td>最大文件 = (块大小 / 指针大小) × 块大小</td>
+                    </tr>
+                    <tr>
+                        <td>多级索引最大文件</td>
+                        <td>N 级索引最大文件 = (块大小 / 指针大小)^N × 块大小</td>
+                    </tr>
+                    <tr>
+                        <td>混合索引最大文件</td>
+                        <td>直接块数 × 块大小 + (块大小/指针) × 块大小 + (块大小/指针)² × 块大小 + (块大小/指针)³ × 块大小</td>
+                    </tr>
+                    <tr>
+                        <td>混合索引 I/O 次数</td>
+                        <td>直接块：1 次 I/O；一级间接：2 次 I/O；二级间接：3 次 I/O；三级间接：4 次 I/O</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- 考点总结 -->
+        <div class="content-card" style="margin-top:24px;">
+            <h3>408 常考填空题 / 选择题速记</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:35%;">知识点</th>
+                        <th>答案</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>哪种分配方式会产生外部碎片？</td>
+                        <td><strong>连续分配</strong></td>
+                    </tr>
+                    <tr>
+                        <td>哪种分配方式不支持随机访问？</td>
+                        <td><strong>隐式链接分配</strong>（需顺链查找）</td>
+                    </tr>
+                    <tr>
+                        <td>FAT 表属于哪种分配方式？</td>
+                        <td><strong>显式链接分配</strong></td>
+                    </tr>
+                    <tr>
+                        <td>哪种分配方式同时支持顺序和随机访问？</td>
+                        <td><strong>连续分配 + 索引分配</strong></td>
+                    </tr>
+                    <tr>
+                        <td>哪种方式最适合小文件？</td>
+                        <td><strong>连续分配</strong>（无额外开销）</td>
+                    </tr>
+                    <tr>
+                        <td>哪种方式最适合动态增长的文件？</td>
+                        <td><strong>链接分配 + 索引分配</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Unix inode 混合索引中，访问直接块需几次 I/O？</td>
+                        <td><strong>1 次</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Unix inode 混合索引中，访问三级间接块需几次 I/O？</td>
+                        <td><strong>4 次</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="summary-footer">
+            计算机组成原理 · 操作系统 · 408 考研专题 · 外存组织方式
+        </div>
+    </div>
+</div>
+
+<!-- ========== JavaScript 页面切换 ========== -->
+<script>
+function switchPage(pageId) {
+    // 隐藏所有页
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    // 显示目标页
+    const target = document.getElementById('page-' + pageId);
+    if (target) target.classList.add('active');
+    // 导航高亮
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`.nav-btn[data-page="${pageId}"]`);
+    if (btn) btn.classList.add('active');
+    // 滚动到顶部
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 绑定导航按钮
+document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        switchPage(this.dataset.page);
+    });
+});
+</script>
+
+</body>
+</html>

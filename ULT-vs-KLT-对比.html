@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ULT vs KLT 全景对比</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;600;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg2: #0f1520;
+    --card: #141b2a;
+    --card-hover: #1a2438;
+    --border: #1e2a42;
+    --fg: #e8ecf4;
+    --fg-muted: #7a8ba8;
+    --accent-ult: #00e5a0;
+    --accent-ult-dim: rgba(0,229,160,0.12);
+    --accent-klt: #ff6b4a;
+    --accent-klt-dim: rgba(255,107,74,0.12);
+    --accent-hybrid: #fbbf24;
+    --accent-hybrid-dim: rgba(251,191,36,0.12);
+    --accent-lib: #38bdf8;
+    --accent-lib-dim: rgba(56,189,248,0.12);
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Noto Sans SC', sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.7;
+  }
+
+  /* 背景氛围 */
+  .atmosphere {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    overflow: hidden;
+  }
+  .atmosphere .orb {
+    position: absolute; border-radius: 50%; filter: blur(120px); opacity: 0.25;
+    animation: orbFloat 18s ease-in-out infinite alternate;
+  }
+  .atmosphere .orb:nth-child(1) {
+    width: 500px; height: 500px; background: var(--accent-ult);
+    top: -10%; left: -8%;
+  }
+  .atmosphere .orb:nth-child(2) {
+    width: 400px; height: 400px; background: var(--accent-klt);
+    bottom: -10%; right: -5%; animation-delay: -6s;
+  }
+  .atmosphere .orb:nth-child(3) {
+    width: 300px; height: 300px; background: var(--accent-hybrid);
+    top: 50%; left: 50%; transform: translate(-50%,-50%);
+    animation-delay: -12s; opacity: 0.12;
+  }
+  @keyframes orbFloat {
+    0% { transform: translate(0, 0) scale(1); }
+    100% { transform: translate(40px, -30px) scale(1.12); }
+  }
+
+  /* 网格纹理 */
+  .grid-overlay {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  .container {
+    position: relative; z-index: 1;
+    max-width: 1440px; margin: 0 auto;
+    padding: 72px 32px 120px;
+  }
+
+  /* 头部 */
+  header {
+    text-align: center; margin-bottom: 88px;
+    animation: fadeInUp 0.8s ease-out both;
+  }
+  header .badge {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 8px 22px; border-radius: 999px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border);
+    font-size: 15px; color: var(--fg-muted); letter-spacing: 1px;
+    margin-bottom: 28px;
+  }
+  header .badge i { color: var(--accent-ult); }
+  header h1 {
+    font-size: clamp(42px, 6vw, 72px); font-weight: 900;
+    letter-spacing: -1.5px; line-height: 1.15;
+    background: linear-gradient(135deg, var(--accent-ult) 0%, #fff 40%, var(--accent-klt) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  header p {
+    margin-top: 20px; font-size: 20px; color: var(--fg-muted);
+    max-width: 680px; margin-left: auto; margin-right: auto;
+  }
+
+  /* 章节标题 */
+  .section-title {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 32px; padding-top: 20px;
+  }
+  .section-title .icon-box {
+    width: 52px; height: 52px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .section-title h2 {
+    font-size: 30px; font-weight: 800; letter-spacing: -0.5px;
+  }
+  .section-title .line {
+    flex: 1; height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+  }
+
+  /* 表格卡片容器 */
+  .table-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 64px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+    animation: fadeInUp 0.7s ease-out both;
+  }
+  .table-card:nth-child(2) { animation-delay: 0.1s; }
+  .table-card:nth-child(3) { animation-delay: 0.2s; }
+  .table-card:nth-child(4) { animation-delay: 0.3s; }
+
+  /* 表格 */
+  .cmp-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 17px;
+  }
+  .cmp-table thead th {
+    padding: 22px 26px;
+    font-weight: 700; font-size: 16px;
+    text-transform: uppercase; letter-spacing: 1.2px;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    background: rgba(255,255,255,0.02);
+    white-space: nowrap;
+  }
+  .cmp-table thead th.col-dim {
+    color: var(--fg-muted); width: 200px;
+  }
+  .cmp-table thead th.col-ult {
+    color: var(--accent-ult);
+    background: var(--accent-ult-dim);
+  }
+  .cmp-table thead th.col-klt {
+    color: var(--accent-klt);
+    background: var(--accent-klt-dim);
+  }
+  .cmp-table thead th.col-hybrid {
+    color: var(--accent-hybrid);
+    background: var(--accent-hybrid-dim);
+  }
+  .cmp-table thead th.col-lib {
+    color: var(--accent-lib);
+    background: var(--accent-lib-dim);
+  }
+
+  .cmp-table tbody td {
+    padding: 20px 26px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top;
+  }
+  .cmp-table tbody tr {
+    transition: background 0.2s;
+  }
+  .cmp-table tbody tr:hover {
+    background: rgba(255,255,255,0.025);
+  }
+  .cmp-table tbody tr:last-child td {
+    border-bottom: none;
+  }
+
+  .cmp-table .dim-cell {
+    font-weight: 600; color: var(--fg-muted);
+    font-size: 16px; white-space: nowrap;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .cmp-table .dim-cell i {
+    font-size: 15px; opacity: 0.6;
+  }
+
+  /* 标签 */
+  .tag {
+    display: inline-block; padding: 4px 12px; border-radius: 8px;
+    font-size: 14px; font-weight: 600; letter-spacing: 0.3px;
+  }
+  .tag-ult { background: var(--accent-ult-dim); color: var(--accent-ult); }
+  .tag-klt { background: var(--accent-klt-dim); color: var(--accent-klt); }
+  .tag-hybrid { background: var(--accent-hybrid-dim); color: var(--accent-hybrid); }
+  .tag-lib { background: var(--accent-lib-dim); color: var(--accent-lib); }
+
+  /* 优缺点图标 */
+  .pro { color: var(--accent-ult); margin-right: 4px; }
+  .con { color: var(--accent-klt); margin-right: 4px; }
+
+  /* 组合模型图示 */
+  .model-diagram {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px; color: var(--fg-muted);
+  }
+  .model-diagram .node {
+    padding: 6px 14px; border-radius: 8px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.03);
+    white-space: nowrap;
+  }
+  .model-diagram .node-ult { border-color: rgba(0,229,160,0.3); color: var(--accent-ult); }
+  .model-diagram .node-klt { border-color: rgba(255,107,74,0.3); color: var(--accent-klt); }
+  .model-diagram .arrow { color: var(--fg-muted); font-size: 16px; }
+
+  /* 底部总结 */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px; margin-top: 56px;
+  }
+  .summary-item {
+    padding: 34px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: transform 0.25s, border-color 0.3s, box-shadow 0.3s;
+    cursor: default;
+  }
+  .summary-item:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  }
+  .summary-item.ult-card:hover { border-color: rgba(0,229,160,0.4); }
+  .summary-item.klt-card:hover { border-color: rgba(255,107,74,0.4); }
+  .summary-item.hybrid-card:hover { border-color: rgba(251,191,36,0.4); }
+  .summary-item .s-icon {
+    width: 56px; height: 56px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; margin-bottom: 18px;
+  }
+  .summary-item.ult-card .s-icon { background: var(--accent-ult-dim); color: var(--accent-ult); }
+  .summary-item.klt-card .s-icon { background: var(--accent-klt-dim); color: var(--accent-klt); }
+  .summary-item.hybrid-card .s-icon { background: var(--accent-hybrid-dim); color: var(--accent-hybrid); }
+  .summary-item h3 { font-size: 20px; font-weight: 800; margin-bottom: 10px; }
+  .summary-item p { font-size: 16px; color: var(--fg-muted); line-height: 1.65; }
+
+  /* 动画 */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(28px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* 响应式 */
+  @media (max-width: 768px) {
+    .container { padding: 44px 16px 72px; }
+    header { margin-bottom: 56px; }
+    .cmp-table { font-size: 15px; }
+    .cmp-table thead th, .cmp-table tbody td { padding: 14px 18px; }
+    .cmp-table .dim-cell { white-space: normal; }
+    .section-title h2 { font-size: 24px; }
+    .model-diagram { flex-wrap: wrap; }
+  }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 7px; height: 7px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--fg-muted); }
+
+  /* 高亮行 */
+  .cmp-table tbody tr.highlight-row {
+    background: rgba(251,191,36,0.04);
+  }
+
+  /* 代码风格 */
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    background: rgba(255,255,255,0.06);
+    padding: 3px 9px; border-radius: 5px;
+    font-size: 0.88em;
+  }
+
+  /* 表格横向滚动 */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 导航指示器 */
+  .nav-dots {
+    position: fixed; right: 24px; top: 50%; transform: translateY(-50%);
+    z-index: 10; display: flex; flex-direction: column; gap: 12px;
+  }
+  .nav-dots a {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--border); display: block;
+    transition: background 0.3s, transform 0.3s;
+  }
+  .nav-dots a:hover, .nav-dots a.active {
+    background: var(--accent-ult); transform: scale(1.4);
+  }
+
+  @media (max-width: 900px) {
+    .nav-dots { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景氛围 -->
+<div class="atmosphere">
+  <div class="orb"></div>
+  <div class="orb"></div>
+  <div class="orb"></div>
+</div>
+<div class="grid-overlay"></div>
+
+<!-- 侧边导航 -->
+<nav class="nav-dots" aria-label="章节导航">
+  <a href="#sec1" title="核心区别" aria-label="核心区别"></a>
+  <a href="#sec2" title="组合模型" aria-label="组合模型"></a>
+  <a href="#sec3" title="线程库" aria-label="线程库"></a>
+  <a href="#sec4" title="总结" aria-label="总结"></a>
+</nav>
+
+<div class="container">
+
+  <!-- 头部 -->
+  <header>
+    <div class="badge"><i class="fas fa-microchip"></i> 操作系统线程模型</div>
+    <h1>ULT vs KLT 全景对比</h1>
+    <p>从核心区别到组合模型再到线程库，一页掌握用户级线程与内核级线程的完整知识体系</p>
+  </header>
+
+  <!-- ============ 第1节：核心区别 ============ -->
+  <section id="sec1">
+    <div class="section-title">
+      <div class="icon-box" style="background:var(--accent-ult-dim);color:var(--accent-ult);">
+        <i class="fas fa-arrows-left-right"></i>
+      </div>
+      <h2>核心区别</h2>
+      <div class="line"></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-scroll">
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th class="col-dim">对比维度</th>
+            <th class="col-ult"><i class="fas fa-user" style="margin-right:6px;"></i>ULT 用户级线程</th>
+            <th class="col-klt"><i class="fas fa-shield-halved" style="margin-right:6px;"></i>KLT 内核级线程</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-cog"></i>管理主体</span></td>
+            <td>由<span class="tag tag-ult">线程库</span>在用户空间管理，内核完全不可见</td>
+            <td>由<span class="tag tag-klt">内核</span>直接管理，内核维护 TCB</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-eye"></i>可见性</span></td>
+            <td>内核不可见，OS 只看到进程</td>
+            <td>内核可见，OS 看到多个执行流</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-clock"></i>切换开销</span></td>
+            <td><span class="pro"><i class="fas fa-bolt"></i></span>极低，仅在用户态保存/恢复寄存器，无需模式切换</td>
+            <td><span class="con"><i class="fas fa-weight-hanging"></i></span>较高，需要用户态→内核态→用户态模式切换</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-plus-circle"></i>创建开销</span></td>
+            <td><span class="pro"><i class="fas fa-bolt"></i></span>轻量，仅分配用户态 TCB 和栈</td>
+            <td><span class="con"><i class="fas fa-weight-hanging"></i></span>较重，需内核分配资源和数据结构</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-ban"></i>阻塞行为</span></td>
+            <td><span class="con"><i class="fas fa-triangle-exclamation"></i></span>一个线程阻塞 → <strong>整个进程阻塞</strong></td>
+            <td><span class="pro"><i class="fas fa-check-circle"></i></span>一个线程阻塞 → 内核可调度同进程其他线程</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-server"></i>多核并行</span></td>
+            <td><span class="con"><i class="fas fa-xmark"></i></span>不能真并行，同一时刻只有一个 ULT 执行</td>
+            <td><span class="pro"><i class="fas fa-check"></i></span>可并行，多个 KLT 可同时运行在多核上</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-sliders"></i>调度控制</span></td>
+            <td><span class="pro"><i class="fas fa-check"></i></span>应用可自定义调度策略（优先级、时间片等）</td>
+            <td><span class="con"><i class="fas fa-lock"></i></span>由内核调度器决定，应用无法直接干预</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-globe"></i>可移植性</span></td>
+            <td><span class="pro"><i class="fas fa-check"></i></span>高，不依赖特定 OS 内核</td>
+            <td><span class="con"><i class="fas fa-xmark"></i></span>低，依赖具体 OS 的线程实现</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-signal"></i>调度依据</span></td>
+            <td>线程库自行决定，缺乏全局 CPU/IO 信息</td>
+            <td>内核掌握全局信息，可做更优调度决策</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-code"></i>典型实现</span></td>
+            <td>协程、绿色线程、早期用户线程库</td>
+            <td>Linux NPTL、Windows 线程</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 第2节：组合模型 ============ -->
+  <section id="sec2">
+    <div class="section-title">
+      <div class="icon-box" style="background:var(--accent-hybrid-dim);color:var(--accent-hybrid);">
+        <i class="fas fa-object-group"></i>
+      </div>
+      <h2>组合模型</h2>
+      <div class="line"></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-scroll">
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th class="col-dim">模型</th>
+            <th class="col-ult">映射关系</th>
+            <th class="col-hybrid">优点</th>
+            <th class="col-klt">缺点</th>
+            <th class="col-lib">典型系统</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- 多对一 -->
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-compress-arrows-alt"></i>Many-to-One</span></td>
+            <td>
+              <div class="model-diagram">
+                <span class="node node-ult">ULT</span>
+                <span class="node node-ult">ULT</span>
+                <span class="node node-ult">ULT</span>
+                <span class="arrow">→</span>
+                <span class="node node-klt">1 KLT</span>
+              </div>
+            </td>
+            <td><span class="pro"><i class="fas fa-bolt"></i></span>切换极快；<span class="pro"><i class="fas fa-check"></i></span>实现简单；<span class="pro"><i class="fas fa-check"></i></span>可移植</td>
+            <td><span class="con"><i class="fas fa-triangle-exclamation"></i></span>一个阻塞全进程阻塞；<span class="con"><i class="fas fa-xmark"></i></span>不能多核并行</td>
+            <td>早期 Solaris 绿色线程、GNU Portable Threads</td>
+          </tr>
+          <!-- 一对一 -->
+          <tr class="highlight-row">
+            <td><span class="dim-cell"><i class="fas fa-arrows-alt-h"></i>One-to-One</span></td>
+            <td>
+              <div class="model-diagram">
+                <span class="node node-ult">ULT</span>
+                <span class="arrow">↔</span>
+                <span class="node node-klt">KLT</span>
+                <span style="margin-left:8px; color:var(--fg-muted);">一一对应</span>
+              </div>
+            </td>
+            <td><span class="pro"><i class="fas fa-check"></i></span>真并行；<span class="pro"><i class="fas fa-check"></i></span>线程独立阻塞；<span class="pro"><i class="fas fa-check"></i></span>多核利用</td>
+            <td><span class="con"><i class="fas fa-weight-hanging"></i></span>创建开销大；<span class="con"><i class="fas fa-weight-hanging"></i></span>线程数受限</td>
+            <td>Linux (NPTL)、Windows NT+、macOS</td>
+          </tr>
+          <!-- 多对多 -->
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-project-diagram"></i>Many-to-Many</span></td>
+            <td>
+              <div class="model-diagram">
+                <span class="node node-ult">ULT×n</span>
+                <span class="arrow">↔</span>
+                <span class="node node-klt">KLT×m</span>
+                <span style="margin-left:8px; color:var(--fg-muted);">n ≥ m</span>
+              </div>
+            </td>
+            <td><span class="pro"><i class="fas fa-check"></i></span>兼顾轻量与并行；<span class="pro"><i class="fas fa-check"></i></span>灵活调度；<span class="pro"><i class="fas fa-check"></i></span>阻塞不连累全局</td>
+            <td><span class="con"><i class="fas fa-cog"></i></span>实现复杂；<span class="con"><i class="fas fa-cog"></i></span>需内核+库协作</td>
+            <td>Solaris 2.x+、IRIX、HP-UX</td>
+          </tr>
+          <!-- 两级 -->
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-layer-group"></i>Two-Level</span></td>
+            <td>
+              <div class="model-diagram">
+                <span class="node node-ult">ULT</span>
+                <span class="arrow">⇄</span>
+                <span class="node node-klt">KLT</span>
+                <span style="color:var(--accent-hybrid); margin:0 4px;">+</span>
+                <span class="node node-ult">ULT×n</span>
+                <span class="arrow">↔</span>
+                <span class="node node-klt">KLT×m</span>
+              </div>
+            </td>
+            <td><span class="pro"><i class="fas fa-check"></i></span>关键线程可绑定 KLT；<span class="pro"><i class="fas fa-check"></i></span>其余灵活复用</td>
+            <td><span class="con"><i class="fas fa-cog"></i></span>最复杂；绑定策略需精心设计</td>
+            <td>Solaris 2.x (绑定 LWP)、某些 UNIX 变体</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 第3节：线程库 ============ -->
+  <section id="sec3">
+    <div class="section-title">
+      <div class="icon-box" style="background:var(--accent-lib-dim);color:var(--accent-lib);">
+        <i class="fas fa-book"></i>
+      </div>
+      <h2>主流线程库</h2>
+      <div class="line"></div>
+    </div>
+
+    <div class="table-card">
+      <div class="table-scroll">
+      <table class="cmp-table">
+        <thead>
+          <tr>
+            <th class="col-dim">线程库</th>
+            <th class="col-lib">所属 / 平台</th>
+            <th class="col-hybrid">底层模型</th>
+            <th class="col-ult">核心 API</th>
+            <th class="col-klt">特点备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-code"></i>Pthreads</span></td>
+            <td>POSIX 标准 (IEEE 1003.1c)</td>
+            <td><span class="tag tag-klt">1:1</span> (Linux NPTL) 或 <span class="tag tag-hybrid">M:M</span> (其他 UNIX)</td>
+            <td><code>pthread_create</code> <code>pthread_join</code> <code>pthread_mutex_lock</code></td>
+            <td>API 行为标准，底层映射取决于 OS 实现</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fab fa-windows"></i>Win32 Threads</span></td>
+            <td>Windows NT 系列</td>
+            <td><span class="tag tag-klt">1:1</span></td>
+            <td><code>CreateThread</code> <code>ExitThread</code> <code>WaitForMultipleObjects</code></td>
+            <td>纯内核线程，真并行；另有 Fiber 实现用户级调度</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fab fa-java"></i>Java Threads</span></td>
+            <td>JVM (跨平台)</td>
+            <td><span class="tag tag-klt">1:1</span> (现代 JVM) / <span class="tag tag-ult">M:1</span> (旧版)</td>
+            <td><code>Thread.start()</code> <code>synchronized</code> <code>ReentrantLock</code></td>
+            <td>虚拟线程 (Project Loom) 属于 ULT + M:M 模型</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-copyright"></i>C++ std::thread</span></td>
+            <td>C++11 标准库</td>
+            <td><span class="tag tag-klt">1:1</span> (主流实现)</td>
+            <td><code>std::thread</code> <code>std::mutex</code> <code>std::condition_variable</code></td>
+            <td>标准只定 API，底层封装 Pthreads / Win32 等</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-feather"></i>Goroutine</span></td>
+            <td>Go 运行时</td>
+            <td><span class="tag tag-hybrid">M:N</span> (GMP 调度器)</td>
+            <td><code>go func()</code> <code>chan</code> <code>sync.Mutex</code></td>
+            <td>用户态调度 + 多 KLT 并行，经典 M:N 模型</td>
+          </tr>
+          <tr>
+            <td><span class="dim-cell"><i class="fas fa-atom"></i>Erlang Process</span></td>
+            <td>BEAM VM</td>
+            <td><span class="tag tag-hybrid">M:N</span></td>
+            <td><code>spawn</code> <code>receive</code> <code>!</code></td>
+            <td>极轻量 ULT，每进程可创建百万级</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 第4节：总结卡片 ============ -->
+  <section id="sec4">
+    <div class="section-title">
+      <div class="icon-box" style="background:rgba(255,255,255,0.06);color:var(--fg);">
+        <i class="fas fa-lightbulb"></i>
+      </div>
+      <h2>选择指南</h2>
+      <div class="line"></div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-item ult-card">
+        <div class="s-icon"><i class="fas fa-user"></i></div>
+        <h3 style="color:var(--accent-ult);">选 ULT 的场景</h3>
+        <p>需要极高创建/切换性能、不频繁阻塞系统调用、需自定义调度策略、或协程式编程模型（如高并发 IO 密集型服务）。典型：Go goroutine、Erlang process、协程库。</p>
+      </div>
+      <div class="summary-item klt-card">
+        <div class="s-icon"><i class="fas fa-shield-halved"></i></div>
+        <h3 style="color:var(--accent-klt);">选 KLT 的场景</h3>
+        <p>需要真正多核并行、线程可能频繁阻塞（IO/锁）、需要内核级调度保障、或直接使用 OS 原生线程 API。典型：Linux NPTL、Windows 线程、计算密集型并行。</p>
+      </div>
+      <div class="summary-item hybrid-card">
+        <div class="s-icon"><i class="fas fa-layer-group"></i></div>
+        <h3 style="color:var(--accent-hybrid);">选混合模型的场景</h3>
+        <p>兼顾 ULT 轻量与 KLT 并行优势，需要大量并发但也要利用多核。典型：Go 的 GMP 调度、Java Project Loom 虚拟线程、Solaris 两级线程模型。</p>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // 导航点高亮
+  const sections = document.querySelectorAll('section[id]');
+  const navDots = document.querySelectorAll('.nav-dots a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        navDots.forEach(dot => {
+          dot.classList.toggle('active', dot.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+
+  sections.forEach(sec => observer.observe(sec));
+
+  // 表格行入场动画
+  const tableRows = document.querySelectorAll('.cmp-table tbody tr');
+  const rowObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateX(0)';
+      }
+    });
+  }, { threshold: 0.1 });
+
+  tableRows.forEach((row, i) => {
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(-20px)';
+    row.style.transition = `opacity 0.4s ease ${i * 0.04}s, transform 0.4s ease ${i * 0.04}s, background 0.2s`;
+    rowObserver.observe(row);
+  });
+
+  // 减少动画偏好
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.querySelectorAll('.atmosphere .orb').forEach(orb => {
+      orb.style.animation = 'none';
+    });
+    tableRows.forEach(row => {
+      row.style.opacity = '1';
+      row.style.transform = 'none';
+      row.style.transition = 'background 0.2s';
+    });
+  }
+</script>
+</body>
+</html>

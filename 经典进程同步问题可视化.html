@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>经典进程同步问题可视化</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#0a0e14;--bg2:#0f1520;--card:#111923;--card2:#162030;
+      --border:#1a2535;--border2:#253550;--fg:#c9d1d9;--fg2:#8b949e;--fg3:#484f58;
+      --title:#e6edf3;--green:#00d68f;--green-d:rgba(0,214,143,.15);
+      --amber:#f5a623;--amber-d:rgba(245,166,35,.15);
+      --coral:#ff6b6b;--coral-d:rgba(255,107,107,.15);
+      --teal:#4ecdc4;--teal-d:rgba(78,205,196,.15);
+      --rose:#f472b6;--rose-d:rgba(244,114,182,.15);
+      --code-bg:#0b1018;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Noto Sans SC',sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;overflow-x:hidden;}
+    body::before{content:'';position:fixed;inset:0;background:
+      radial-gradient(circle at 15% 25%,rgba(0,214,143,.04) 0%,transparent 50%),
+      radial-gradient(circle at 85% 75%,rgba(245,166,35,.04) 0%,transparent 50%),
+      linear-gradient(rgba(26,37,53,.12) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(26,37,53,.12) 1px,transparent 1px);
+      background-size:100% 100%,100% 100%,36px 36px,36px 36px;pointer-events:none;z-index:0;}
+    .app{position:relative;z-index:1;max-width:1600px;margin:0 auto;padding:18px 24px;}
+    header{text-align:center;margin-bottom:18px;}
+    header h1{font-size:32px;font-weight:900;letter-spacing:2px;color:var(--title);}
+    header h1 span{color:var(--green);}
+    header .sub{font-size:15px;color:var(--fg2);font-weight:300;letter-spacing:1px;}
+
+    /* Tab */
+    .tabs{display:flex;justify-content:center;gap:8px;margin:16px 0 18px;flex-wrap:wrap;}
+    .tab{padding:10px 24px;background:var(--card);border:1px solid var(--border);border-radius:10px;color:var(--fg2);cursor:pointer;font-size:15px;font-weight:600;transition:all .3s;font-family:inherit;}
+    .tab:hover{border-color:var(--border2);color:var(--fg);}
+    .tab.active{border-color:var(--green);color:var(--green);background:var(--card2);box-shadow:0 0 16px var(--green-d);}
+    .tab .tk{display:inline-block;background:rgba(255,255,255,.07);border-radius:3px;padding:2px 7px;font-size:12px;margin-right:6px;font-family:'JetBrains Mono',monospace;}
+
+    /* 主网格 */
+    .grid{display:grid;grid-template-columns:320px 1fr 240px;gap:16px;margin-bottom:16px;}
+    @media(max-width:1100px){.grid{grid-template-columns:1fr;}}
+
+    /* 面板通用 */
+    .panel{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+    .panel-hd{padding:12px 16px;font-size:15px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+    .panel-bd{padding:14px;}
+
+    /* 代码面板 */
+    .code-panel{max-height:600px;overflow-y:auto;}
+    .code-panel::-webkit-scrollbar{width:6px;}
+    .code-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+    .proc-block{margin-bottom:4px;}
+    .proc-hd{padding:10px 16px;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
+    .proc-hd .dot{width:10px;height:10px;border-radius:50%;}
+    .proc-hd .state-tag{margin-left:auto;font-size:12px;padding:3px 10px;border-radius:10px;font-weight:600;letter-spacing:.5px;}
+    .code-body{font-family:'JetBrains Mono',monospace;font-size:15px;line-height:2;padding:6px 0;}
+    .cl{padding:3px 14px 3px 20px;white-space:pre;border-left:3px solid transparent;transition:all .3s;position:relative;}
+    .cl .ln{display:inline-block;width:22px;color:var(--fg3);font-size:12px;text-align:right;margin-right:12px;user-select:none;}
+    .cl.on{background:var(--green-d);border-left-color:var(--green);}
+    .cl.on .ln{color:var(--green);}
+    .cl.blocked{background:var(--coral-d);border-left-color:var(--coral);}
+    .cl.blocked .ln{color:var(--coral);}
+    .kw{color:#c678dd;}.fn{color:#61afef;}.sem{color:#e5c07b;}.var{color:#e5c07b;}.num{color:#d19a66;}.crit{color:var(--amber);font-weight:700;}
+
+    /* 可视化面板 */
+    .viz-panel{min-height:400px;position:relative;}
+    .viz-bd{position:relative;width:100%;height:100%;min-height:400px;}
+
+    /* 信号量面板 */
+    .sem-grid{display:flex;flex-direction:column;gap:10px;}
+    .sem-card{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;text-align:center;transition:all .4s;}
+    .sem-card.flash{animation:sflash .5s;}
+    @keyframes sflash{0%{transform:scale(1);}30%{transform:scale(1.06);}100%{transform:scale(1);}}
+    .sem-card.changed{border-color:var(--amber);box-shadow:0 0 10px var(--amber-d);}
+    .sem-name{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--fg2);margin-bottom:5px;}
+    .sem-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;transition:color .3s;}
+    .sem-val.pos{color:var(--green);}.sem-val.zero{color:var(--amber);}.sem-val.neg{color:var(--coral);}
+    .var-card{background:var(--code-bg);border:1px solid var(--border);border-radius:8px;padding:10px 14px;text-align:center;}
+    .var-name{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--fg2);}
+    .var-val{font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:var(--teal);}
+
+    /* 控制 */
+    .ctrl{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+    .cb{padding:10px 18px;border-radius:8px;border:1px solid var(--border);background:var(--card2);color:var(--fg);cursor:pointer;font-size:14px;font-weight:600;font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:6px;}
+    .cb:hover{border-color:var(--border2);background:var(--border);}
+    .cb:active{transform:scale(.96);}
+    .cb .kh{background:rgba(255,255,255,.06);padding:2px 7px;border-radius:4px;font-size:11px;font-family:'JetBrains Mono',monospace;}
+    .cb.active{border-color:var(--green);color:var(--green);background:var(--green-d);}
+    .sep{width:1px;height:26px;background:var(--border);margin:0 4px;}
+    .speed{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--fg2);}
+    .speed input{width:80px;accent-color:var(--green);}
+
+    /* 日志 */
+    .log-panel .panel-bd{max-height:160px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.8;}
+    .log-panel .panel-bd::-webkit-scrollbar{width:5px;}.log-panel .panel-bd::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+    .le{opacity:0;animation:li .3s forwards;}.le .lt{color:var(--fg3);margin-right:8px;}
+    @keyframes li{to{opacity:1;}}
+
+    /* 警告 */
+    .alert{border-radius:10px;padding:14px 18px;font-size:15px;line-height:1.6;display:none;animation:ai .4s;margin-top:12px;}
+    @keyframes ai{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:translateY(0);}}
+    .alert.deadlock{display:block;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);color:var(--coral);}
+    .alert.violation{display:block;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.3);color:var(--coral);}
+    .alert.ok{display:block;background:var(--green-d);border:1px solid rgba(0,214,143,.3);color:var(--green);}
+    .alert i{margin-right:6px;}
+
+    /* ===== 生产者-消费者可视化 ===== */
+    .pc-viz{display:flex;flex-direction:column;align-items:center;gap:22px;padding-top:14px;}
+    .pc-label{font-size:16px;font-weight:700;color:var(--title);margin-bottom:6px;}
+    .buffer-row{display:flex;gap:6px;justify-content:center;margin:10px 0;}
+    .buf-cell{width:68px;height:68px;border:2px solid var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:26px;transition:all .4s;position:relative;}
+    .buf-cell.filled{background:var(--green-d);border-color:var(--green);box-shadow:0 0 10px var(--green-d);}
+    .buf-cell .ptr{position:absolute;font-size:11px;font-weight:700;bottom:-18px;}
+    .buf-cell .ptr.in-ptr{color:var(--green);}
+    .buf-cell .ptr.out-ptr{color:var(--amber);}
+    .pc-roles{display:flex;gap:40px;justify-content:center;align-items:center;width:100%;}
+    .pc-role{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;border-radius:12px;border:1px solid var(--border);min-width:120px;transition:all .3s;}
+    .pc-role.active-prod{border-color:var(--green);box-shadow:0 0 12px var(--green-d);}
+    .pc-role.active-cons{border-color:var(--amber);box-shadow:0 0 12px var(--amber-d);}
+    .pc-role .icon{font-size:34px;}
+    .pc-role .rname{font-size:14px;font-weight:600;}
+    .pc-arrow{font-size:28px;color:var(--fg3);}
+
+    /* ===== 读者-写者可视化 ===== */
+    .rw-viz{display:flex;flex-direction:column;align-items:center;gap:16px;padding-top:14px;}
+    .rw-file{width:150px;height:100px;background:var(--card2);border:2px solid var(--border2);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:34px;position:relative;transition:all .4s;}
+    .rw-file.reading{border-color:var(--teal);box-shadow:0 0 15px var(--teal-d);}
+    .rw-file.writing{border-color:var(--coral);box-shadow:0 0 15px var(--coral-d);animation:write-pulse 1s infinite;}
+    @keyframes write-pulse{0%,100%{box-shadow:0 0 15px var(--coral-d);}50%{box-shadow:0 0 25px rgba(255,107,107,.3);}}
+    .rw-file .file-label{position:absolute;bottom:-24px;font-size:12px;color:var(--fg2);font-weight:600;}
+    .rw-actors{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-top:16px;}
+    .rw-actor{display:flex;flex-direction:column;align-items:center;gap:6px;padding:10px 16px;border-radius:10px;border:1px solid var(--border);min-width:85px;transition:all .3s;font-size:13px;}
+    .rw-actor.waiting{border-color:var(--amber);background:var(--amber-d);}
+    .rw-actor.active-r{border-color:var(--teal);background:var(--teal-d);}
+    .rw-actor.active-w{border-color:var(--coral);background:var(--coral-d);}
+    .rw-actor .ai{font-size:26px;margin-bottom:2px;}
+
+    /* ===== 哲学家进餐可视化 ===== */
+    .ph-viz{position:relative;width:420px;height:420px;margin:14px auto 0;}
+    .ph-table{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border-radius:50%;background:var(--card2);border:2px solid var(--border2);}
+    .ph-person,.ph-stick{position:absolute;display:flex;align-items:center;justify-content:center;transition:all .4s;}
+    .ph-person{width:54px;height:54px;border-radius:50%;border:2px solid var(--border);font-size:20px;font-weight:700;}
+    .ph-person.thinking{background:var(--card2);border-color:var(--fg3);color:var(--fg3);}
+    .ph-person.hungry{background:var(--amber-d);border-color:var(--amber);color:var(--amber);animation:hungry-p 1s infinite;}
+    @keyframes hungry-p{0%,100%{box-shadow:0 0 5px var(--amber-d);}50%{box-shadow:0 0 15px rgba(245,166,35,.4);}}
+    .ph-person.eating{background:var(--green-d);border-color:var(--green);color:var(--green);box-shadow:0 0 12px var(--green-d);}
+    .ph-stick{width:8px;height:36px;border-radius:4px;background:var(--fg3);transition:all .3s;}
+    .ph-stick.used{background:var(--green);box-shadow:0 0 6px var(--green-d);}
+    .ph-name{position:absolute;font-size:11px;color:var(--fg2);font-weight:600;white-space:nowrap;}
+
+    /* ===== 苹果橘子可视化 ===== */
+    .ao-viz{display:flex;flex-direction:column;align-items:center;gap:16px;padding-top:14px;}
+    .ao-table{position:relative;width:280px;height:280px;}
+    .ao-plate{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:130px;height:130px;border-radius:50%;background:var(--card2);border:3px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:50px;transition:all .4s;}
+    .ao-plate.has-item{border-color:var(--amber);box-shadow:0 0 15px var(--amber-d);}
+    .ao-person{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;transition:all .3s;}
+    .ao-person .ao-icon{font-size:34px;width:54px;height:54px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;transition:all .3s;}
+    .ao-person .ao-nm{font-size:12px;font-weight:600;}
+    .ao-person.acting .ao-icon{border-color:var(--green);box-shadow:0 0 10px var(--green-d);}
+    .ao-person.blocked .ao-icon{border-color:var(--coral);box-shadow:0 0 10px var(--coral-d);}
+
+    .toast-box{position:fixed;top:20px;right:20px;z-index:100;display:flex;flex-direction:column;gap:8px;}
+    .toast{padding:12px 18px;border-radius:8px;font-size:14px;font-weight:600;animation:ti .3s,to .3s 2.5s forwards;box-shadow:0 4px 16px rgba(0,0,0,.4);}
+    .toast.err{background:#3d2020;color:#ff6b6b;border:1px solid rgba(255,107,107,.3);}
+    .toast.wrn{background:#3d3520;color:var(--amber);border:1px solid rgba(245,166,35,.3);}
+    .toast.suc{background:#1d3d2a;color:var(--green);border:1px solid rgba(0,214,143,.3);}
+    @keyframes ti{from{opacity:0;transform:translateX(30px);}}@keyframes to{to{opacity:0;transform:translateX(30px);}}
+
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>经典进程同步 <span>问题可视化</span></h1>
+    <p class="sub">P/V 操作 · 信号量机制 · 四大经典问题</p>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <section class="grid" aria-label="主要内容">
+    <div class="panel code-panel" id="codePanel"></div>
+    <div class="panel viz-panel"><div class="panel-hd"><i class="fas fa-eye" style="font-size:10px;"></i> 过程可视化</div><div class="panel-bd viz-bd" id="vizBd"></div></div>
+    <div class="panel" id="semPanel"></div>
+  </section>
+  <div class="alert" id="alertBox"></div>
+  <div class="ctrl" id="ctrlBar"></div>
+  <div class="panel log-panel"><div class="panel-hd"><i class="fas fa-terminal" style="font-size:10px;"></i> 操作日志</div><div class="panel-bd" id="logBd"></div></div>
+</div>
+<div class="toast-box" id="toastBox"></div>
+
+<script>
+/* ========== 四大问题数据 ========== */
+const P = [
+  /* 0: 生产者-消费者 */
+  {
+    name:'生产者-消费者', short:'生消',
+    sems:{mutex:1,empty:5,full:0},
+    semDesc:[{k:'mutex',d:'互斥锁'},{k:'empty',d:'空缓冲区'},{k:'full',d:'满缓冲区'}],
+    svars:{_in:0,_out:0,_count:0},
+    svarDesc:[{k:'_in',d:'放入位置'},{k:'_out',d:'取出位置'},{k:'_count',d:'缓冲区计数'}],
+    buf:[], bufSize:5,
+    procs:[
+      { name:'生产者',key:'prod',color:'var(--green)',shortcut:'P',
+        code:[
+          '<span class="kw">produce</span>(item);',
+          '<span class="fn">P</span>(<span class="sem">empty</span>);',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          'buffer[<span class="var">in</span>]=item; <span class="var">in</span>=(<span class="var">in</span>+1)%n;',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="fn">V</span>(<span class="sem">full</span>);',
+        ],
+        steps:[
+          {line:0,desc:'生产一个产品'},
+          {line:1,pSem:'empty',desc:'P(empty) 申请空位'},
+          {line:2,pSem:'mutex',desc:'P(mutex) 获取互斥锁'},
+          {line:3,desc:'放入缓冲区',act:'produce'},
+          {line:4,vSem:'mutex',desc:'V(mutex) 释放互斥锁'},
+          {line:5,vSem:'full',desc:'V(full) 增加产品数'},
+        ]
+      },
+      { name:'消费者',key:'cons',color:'var(--amber)',shortcut:'C',
+        code:[
+          '<span class="fn">P</span>(<span class="sem">full</span>);',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          'item=buffer[<span class="var">out</span>]; <span class="var">out</span>=(<span class="var">out</span>+1)%n;',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="fn">V</span>(<span class="sem">empty</span>);',
+          '<span class="kw">consume</span>(item);',
+        ],
+        steps:[
+          {line:0,pSem:'full',desc:'P(full) 申请产品'},
+          {line:1,pSem:'mutex',desc:'P(mutex) 获取互斥锁'},
+          {line:2,desc:'从缓冲区取出',act:'consume'},
+          {line:3,vSem:'mutex',desc:'V(mutex) 释放互斥锁'},
+          {line:4,vSem:'empty',desc:'V(empty) 增加空位'},
+          {line:5,desc:'消费产品'},
+        ]
+      }
+    ],
+    demo:['prod','prod','prod','cons','prod','cons','cons','cons','prod','cons']
+  },
+
+  /* 1: 读者-写者 */
+  {
+    name:'读者-写者', short:'读写',
+    sems:{mutex:1,rw:1},
+    semDesc:[{k:'mutex',d:'保护readcount'},{k:'rw',d:'读写锁'}],
+    svars:{readcount:0},
+    svarDesc:[{k:'readcount',d:'当前读者数'}],
+    procs:[
+      { name:'读者1',key:'r1',color:'var(--teal)',shortcut:'R',
+        code:[
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          '<span class="var">readcount</span>++;',
+          '<span class="kw">if</span>(<span class="var">readcount</span>==1) <span class="fn">P</span>(<span class="sem">rw</span>);',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="crit">reading</span>();',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          '<span class="var">readcount</span>--;',
+          '<span class="kw">if</span>(<span class="var">readcount</span>==0) <span class="fn">V</span>(<span class="sem">rw</span>);',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+        ],
+        steps:[
+          {line:0,pSem:'mutex',desc:'P(mutex)'},
+          {line:1,desc:'readcount++',act:'rc_inc'},
+          {line:2,pSem:'rw',cond:'rc_eq_1',desc:'if(rc==1) P(rw)'},
+          {line:3,vSem:'mutex',desc:'V(mutex)'},
+          {line:4,desc:'读取数据',act:'reading'},
+          {line:5,pSem:'mutex',desc:'P(mutex)'},
+          {line:6,desc:'readcount--',act:'rc_dec'},
+          {line:7,vSem:'rw',cond:'rc_eq_0',desc:'if(rc==0) V(rw)'},
+          {line:8,vSem:'mutex',desc:'V(mutex)'},
+        ]
+      },
+      { name:'读者2',key:'r2',color:'var(--teal)',shortcut:'T',
+        code:null, /* 共用读者代码 */
+        steps:null, /* 共用读者步骤 */
+        copyFrom:0
+      },
+      { name:'写者',key:'w1',color:'var(--coral)',shortcut:'W',
+        code:[
+          '<span class="fn">P</span>(<span class="sem">rw</span>);',
+          '<span class="crit">writing</span>();',
+          '<span class="fn">V</span>(<span class="sem">rw</span>);',
+        ],
+        steps:[
+          {line:0,pSem:'rw',desc:'P(rw) 申请写锁'},
+          {line:1,desc:'写入数据',act:'writing'},
+          {line:2,vSem:'rw',desc:'V(rw) 释放写锁'},
+        ]
+      }
+    ],
+    demo:['r1','r2','w1','r1','r2','r1','r2']
+  },
+
+  /* 2: 哲学家进餐 */
+  {
+    name:'哲学家进餐', short:'哲进',
+    sems:{c0:1,c1:1,c2:1,c3:1,c4:1},
+    semDesc:[{k:'c0',d:'筷子0'},{k:'c1',d:'筷子1'},{k:'c2',d:'筷子2'},{k:'c3',d:'筷子3'},{k:'c4',d:'筷子4'}],
+    svars:{},
+    svarDesc:[],
+    procs:(function(){
+      const names=['哲0','哲1','哲2','哲3','哲4'];
+      const colors=['var(--green)','var(--amber)','var(--teal)','var(--rose)','var(--coral)'];
+      const shortcuts=['1','2','3','4','5'];
+      const arr=[];
+      for(let i=0;i<5;i++){
+        const li=i, ri=(i+1)%5;
+        arr.push({
+          name:names[i],key:'ph'+i,color:colors[i],shortcut:shortcuts[i],
+          code:[
+            '<span class="kw">think</span>();',
+            '<span class="fn">P</span>(<span class="sem">chopstick['+li+']</span>);',
+            '<span class="fn">P</span>(<span class="sem">chopstick['+ri+']</span>);',
+            '<span class="crit">eat</span>();',
+            '<span class="fn">V</span>(<span class="sem">chopstick['+li+']</span>);',
+            '<span class="fn">V</span>(<span class="sem">chopstick['+ri+']</span>);',
+          ],
+          steps:[
+            {line:0,desc:'思考中...'},
+            {line:1,pSem:'c'+li,desc:'P(chopstick['+li+']) 拿左筷子'},
+            {line:2,pSem:'c'+ri,desc:'P(chopstick['+ri+']) 拿右筷子'},
+            {line:3,desc:'进餐中',act:'eat'+i},
+            {line:4,vSem:'c'+li,desc:'V(chopstick['+li+']) 放左筷子'},
+            {line:5,vSem:'c'+ri,desc:'V(chopstick['+ri+']) 放右筷子'},
+          ]
+        });
+      }
+      return arr;
+    })(),
+    demo:['ph0','ph1','ph2','ph3','ph4'] /* 所有人都拿左筷子→死锁 */
+  },
+
+  /* 3: 苹果橘子 */
+  {
+    name:'苹果橘子问题', short:'果盘',
+    sems:{empty:1,apple:0,orange:0,mutex:1},
+    semDesc:[{k:'empty',d:'盘子空位'},{k:'apple',d:'苹果数'},{k:'orange',d:'橘子数'},{k:'mutex',d:'互斥锁'}],
+    svars:{plate:null},
+    svarDesc:[{k:'plate',d:'盘中内容'}],
+    procs:[
+      { name:'爸爸',key:'dad',color:'var(--green)',shortcut:'B',
+        code:[
+          '<span class="kw">prepare</span>(<span class="sem">apple</span>);',
+          '<span class="fn">P</span>(<span class="sem">empty</span>);',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          '<span class="kw">put</span>(<span class="sem">apple</span>);',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="fn">V</span>(<span class="sem">apple</span>);',
+        ],
+        steps:[
+          {line:0,desc:'准备苹果'},
+          {line:1,pSem:'empty',desc:'P(empty) 等待空盘'},
+          {line:2,pSem:'mutex',desc:'P(mutex) 获取互斥锁'},
+          {line:3,desc:'放入苹果',act:'put_apple'},
+          {line:4,vSem:'mutex',desc:'V(mutex) 释放互斥锁'},
+          {line:5,vSem:'apple',desc:'V(apple) 苹果+1'},
+        ]
+      },
+      { name:'妈妈',key:'mom',color:'var(--amber)',shortcut:'M',
+        code:[
+          '<span class="kw">prepare</span>(<span class="sem">orange</span>);',
+          '<span class="fn">P</span>(<span class="sem">empty</span>);',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          '<span class="kw">put</span>(<span class="sem">orange</span>);',
+          '<line class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="fn">V</span>(<span class="sem">orange</span>);',
+        ],
+        steps:[
+          {line:0,desc:'准备橘子'},
+          {line:1,pSem:'empty',desc:'P(empty) 等待空盘'},
+          {line:2,pSem:'mutex',desc:'P(mutex) 获取互斥锁'},
+          {line:3,desc:'放入橘子',act:'put_orange'},
+          {line:4,vSem:'mutex',desc:'V(mutex) 释放互斥锁'},
+          {line:5,vSem:'orange',desc:'V(orange) 橘子+1'},
+        ]
+      },
+      { name:'女儿',key:'daughter',color:'var(--rose)',shortcut:'G',
+        code:[
+          '<span class="fn">P</span>(<span class="sem">apple</span>);',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          '<span class="kw">take</span>(<span class="sem">apple</span>);',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="fn">V</span>(<span class="sem">empty</span>);',
+          '<span class="kw">eat</span>(<span class="sem">apple</span>);',
+        ],
+        steps:[
+          {line:0,pSem:'apple',desc:'P(apple) 等待苹果'},
+          {line:1,pSem:'mutex',desc:'P(mutex) 获取互斥锁'},
+          {line:2,desc:'取苹果',act:'take_apple'},
+          {line:3,vSem:'mutex',desc:'V(mutex) 释放互斥锁'},
+          {line:4,vSem:'empty',desc:'V(empty) 空位+1'},
+          {line:5,desc:'吃苹果'},
+        ]
+      },
+      { name:'儿子',key:'son',color:'var(--teal)',shortcut:'S',
+        code:[
+          '<span class="fn">P</span>(<span class="sem">orange</span>);',
+          '<span class="fn">P</span>(<span class="sem">mutex</span>);',
+          '<span class="kw">take</span>(<span class="sem">orange</span>);',
+          '<span class="fn">V</span>(<span class="sem">mutex</span>);',
+          '<span class="fn">V</span>(<span class="sem">empty</span>);',
+          '<span class="kw">eat</span>(<span class="sem">orange</span>);',
+        ],
+        steps:[
+          {line:0,pSem:'orange',desc:'P(orange) 等待橘子'},
+          {line:1,pSem:'mutex',desc:'P(mutex) 获取互斥锁'},
+          {line:2,desc:'取橘子',act:'take_orange'},
+          {line:3,vSem:'mutex',desc:'V(mutex) 释放互斥锁'},
+          {line:4,vSem:'empty',desc:'V(empty) 空位+1'},
+          {line:5,desc:'吃橘子'},
+        ]
+      }
+    ],
+    demo:['dad','daughter','mom','son','dad','daughter','mom','son']
+  }
+];
+
+/* 修复妈妈代码中的HTML错误 */
+P[3].procs[1].code[4] = '<span class="fn">V</span>(<span class="sem">mutex</span>);';
+
+/* ========== 全局状态 ========== */
+let curP = 0; // 当前问题索引
+let sems = {}; // 信号量
+let prevSems = {}; // 上一步信号量（检测变化）
+let svars = {}; // 共享变量
+let pstates = []; // 每个进程的状态 {step, waiting, waitSem, cycle}
+let autoOn = false, autoTm = null, demoTm = null;
+let logs = [], logCnt = 0;
+
+/* ========== 切换问题 ========== */
+function switchProblem(idx) {
+  if (autoOn) toggleAuto();
+  if (demoTm) { clearTimeout(demoTm); demoTm = null; }
+  curP = idx;
+  const p = P[idx];
+  // 初始化信号量
+  sems = {}; prevSems = {};
+  for (let k in p.sems) { sems[k] = p.sems[k]; prevSems[k] = p.sems[k]; }
+  // 初始化共享变量
+  svars = {};
+  for (let k in p.svars) svars[k] = p.svars[k];
+  // 初始化进程状态
+  pstates = p.procs.map(() => ({step:-1, waiting:false, waitSem:null, cycle:0}));
+  // 特殊初始化
+  if (idx === 0) { p.buf = []; p.bufSize = 5; }
+  if (idx === 3) svars.plate = null;
+  logs = []; logCnt = 0;
+  document.getElementById('alertBox').className = 'alert';
+  render();
+  addLog('切换到：' + p.name, 'sys');
+}
+
+/* ========== 进程步进 ========== */
+function advance(key) {
+  const p = P[curP];
+  const pi = p.procs.findIndex(pr => pr.key === key);
+  if (pi < 0) return;
+  const proc = p.procs[pi];
+  const st = pstates[pi];
+  prevSems = {...sems};
+
+  // 复制代码的进程（读者2）
+  let steps = proc.steps;
+  if (proc.copyFrom !== undefined) steps = p.procs[proc.copyFrom].steps;
+  if (!steps) return;
+
+  if (st.step === -1) {
+    // 从剩余区开始
+    st.step = 0;
+    execStep(pi, 0);
+  } else if (st.waiting) {
+    // 被阻塞，检查信号量
+    if (sems[st.waitSem] >= 0) {
+      st.waiting = false;
+      st.waitSem = null;
+      st.step++;
+      if (st.step >= steps.length) { finishProc(pi); return; }
+      execStep(pi, st.step);
+    } else {
+      addLog(proc.name + ': 仍在等待 ' + st.waitSem + '=' + sems[st.waitSem], 'wrn');
+    }
+  } else {
+    st.step++;
+    if (st.step >= steps.length) { finishProc(pi); return; }
+    execStep(pi, st.step);
+  }
+  checkAlerts();
+  render();
+}
+
+function execStep(pi, si) {
+  const p = P[curP];
+  const proc = p.procs[pi];
+  let steps = proc.steps;
+  if (proc.copyFrom !== undefined) steps = p.procs[proc.copyFrom].steps;
+  const s = steps[si];
+  const st = pstates[pi];
+
+  // 条件P操作（读者问题：if readcount==1 才P(rw)）
+  if (s.cond === 'rc_eq_1') {
+    if (svars.readcount === 1) {
+      // 执行P(rw)
+      sems.rw--;
+      if (sems.rw < 0) { st.waiting = true; st.waitSem = 'rw'; addLog(proc.name+': P(rw) 阻塞! rw='+sems.rw,pi); }
+      else addLog(proc.name+': P(rw) 成功, rw='+sems.rw, pi);
+    } else {
+      addLog(proc.name+': readcount≠1, 跳过P(rw)', pi);
+    }
+  } else if (s.cond === 'rc_eq_0') {
+    if (svars.readcount === 0) {
+      sems.rw++;
+      addLog(proc.name+': readcount==0, V(rw), rw='+sems.rw, pi);
+    } else {
+      addLog(proc.name+': readcount≠0, 跳过V(rw)', pi);
+    }
+  }
+
+  // 普通P操作
+  if (s.pSem && !s.cond) {
+    sems[s.pSem]--;
+    if (sems[s.pSem] < 0) {
+      st.waiting = true;
+      st.waitSem = s.pSem;
+      addLog(proc.name+': P('+s.pSem+') 阻塞! '+s.pSem+'='+sems[s.pSem], pi);
+    } else {
+      addLog(proc.name+': P('+s.pSem+') 成功, '+s.pSem+'='+sems[s.pSem], pi);
+    }
+  }
+
+  // V操作
+  if (s.vSem && !s.cond) {
+    sems[s.vSem]++;
+    addLog(proc.name+': V('+s.vSem+'), '+s.vSem+'='+sems[s.vSem], pi);
+  }
+
+  // 特殊动作
+  handleAction(pi, s.act);
+
+  if (!s.pSem && !s.vSem && !s.cond && s.desc) {
+    addLog(proc.name+': '+s.desc, pi);
+  }
+}
+
+function finishProc(pi) {
+  const proc = P[curP].procs[pi];
+  const st = pstates[pi];
+  st.step = -1; st.waiting = false; st.waitSem = null; st.cycle++;
+  addLog(proc.name+': 回到剩余区', pi);
+}
+
+/* 特殊动作处理 */
+function handleAction(pi, act) {
+  if (!act) return;
+  const p = P[curP];
+  switch(act) {
+    case 'produce':
+      if (p.buf.length < p.bufSize) {
+        p.buf.push('📦');
+        svars._in = (svars._in + 1) % p.bufSize;
+        svars._count = p.buf.length;
+      }
+      break;
+    case 'consume':
+      if (p.buf.length > 0) {
+        p.buf.shift();
+        svars._out = (svars._out + 1) % p.bufSize;
+        svars._count = p.buf.length;
+      }
+      break;
+    case 'rc_inc': svars.readcount++; break;
+    case 'rc_dec': svars.readcount--; break;
+    case 'reading': break; // 只是标记
+    case 'writing': break;
+    case 'put_apple': svars.plate = 'apple'; break;
+    case 'put_orange': svars.plate = 'orange'; break;
+    case 'take_apple': svars.plate = null; break;
+    case 'take_orange': svars.plate = null; break;
+    default:
+      if (act.startsWith('eat')) break; // 哲学家进餐标记
+  }
+}
+
+/* 检查警告 */
+function checkAlerts() {
+  const el = document.getElementById('alertBox');
+  el.className = 'alert';
+  const p = P[curP];
+
+  // 死锁检测：所有活跃进程都在等待
+  const active = pstates.filter(s => s.step >= 0);
+  const allWait = active.length > 0 && active.every(s => s.waiting);
+  if (allWait) {
+    el.innerHTML = '<i class="fas fa-lock"></i> <strong>死锁!</strong> 所有进程都在等待，无法继续执行。';
+    el.classList.add('deadlock');
+    toast('死锁！所有进程互相等待', 'err');
+    if (autoOn) toggleAuto();
+    return;
+  }
+
+  // 哲学家：3个以上同时拿左筷子可能死锁
+  if (curP === 2) {
+    const leftHeld = pstates.filter((s,i) => s.step >= 1 && !s.waiting && s.step <= 2).length;
+    if (leftHeld >= 3) {
+      el.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>警告：</strong> 多个哲学家持有左筷子，存在死锁风险！';
+      el.classList.add('violation');
+    }
+  }
+
+  // 读者-写者：写者饥饿检测
+  if (curP === 1) {
+    const writing = pstates.some((s,i) => P[1].procs[i].key.startsWith('w') && s.step >= 0 && !s.waiting);
+    const readersIn = pstates.filter((s,i) => P[1].procs[i].key.startsWith('r') && s.step >= 0 && s.step <= 4 && !s.waiting).length;
+    if (writing && readersIn > 0) {
+      el.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>互斥违反!</strong> 读者和写者同时访问共享数据！';
+      el.classList.add('violation');
+      toast('互斥违反！', 'err');
+      if (autoOn) toggleAuto();
+    }
+  }
+}
+
+/* ========== 渲染 ========== */
+function render() {
+  renderTabs();
+  renderCode();
+  renderSem();
+  renderViz();
+  renderCtrl();
+  renderLogs();
+}
+
+function renderTabs() {
+  const el = document.getElementById('tabs');
+  el.innerHTML = P.map((p,i) =>
+    `<button class="tab ${i===curP?'active':''}" onclick="switchProblem(${i})" role="tab" aria-selected="${i===curP}"><span class="tk">${i+1}</span>${p.short}</button>`
+  ).join('');
+}
+
+function renderCode() {
+  const p = P[curP];
+  const el = document.getElementById('codePanel');
+  let html = '<div class="panel-hd"><i class="fas fa-code" style="font-size:10px;"></i> P/V 操作代码</div><div class="panel-bd" style="padding:0;">';
+
+  p.procs.forEach((proc, pi) => {
+    const st = pstates[pi];
+    let code = proc.code;
+    let steps = proc.steps;
+    if (proc.copyFrom !== undefined) {
+      code = p.procs[proc.copyFrom].code;
+      steps = p.procs[proc.copyFrom].steps;
+    }
+    if (!code) return;
+
+    // 状态标签
+    let stateText = '剩余区', stateCls = 'idle';
+    if (st.step >= 0) {
+      if (st.waiting) { stateText = '阻塞'; stateCls = 'blocked'; }
+      else if (st.step < steps.length) {
+        const s = steps[st.step];
+        if (s.act && (s.act.includes('produce') || s.act.includes('consume') || s.act.includes('reading') || s.act.includes('writing') || s.act.includes('eat') || s.act.includes('put_') || s.act.includes('take_'))) { stateText = '执行中'; stateCls = 'active'; }
+        else { stateText = '执行中'; stateCls = 'active'; }
+      }
+    }
+
+    html += `<div class="proc-block">
+      <div class="proc-hd" style="color:${proc.color};">
+        <span class="dot" style="background:${proc.color};box-shadow:0 0 6px ${proc.color};"></span>
+        ${proc.name}
+        <span class="state-tag ${stateCls}" style="${stateCls==='blocked'?'background:var(--coral-d);color:var(--coral);':stateCls==='active'?'background:var(--green-d);color:var(--green);':'background:rgba(255,255,255,.05);color:var(--fg3);'}">${stateText}</span>
+      </div>
+      <div class="code-body">`;
+    code.forEach((line, li) => {
+      const isOn = st.step === li && !st.waiting;
+      const isBlocked = st.step === li && st.waiting;
+      html += `<div class="cl ${isOn?'on':''} ${isBlocked?'blocked':''}"><span class="ln">${li+1}</span>${line}</div>`;
+    });
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function renderSem() {
+  const p = P[curP];
+  const el = document.getElementById('semPanel');
+  let html = '<div class="panel-hd"><i class="fas fa-database" style="font-size:10px;"></i> 信号量与变量</div><div class="panel-bd"><div class="sem-grid">';
+
+  p.semDesc.forEach(sd => {
+    const v = sems[sd.k];
+    const pv = prevSems[sd.k];
+    const changed = v !== pv;
+    const cls = v > 0 ? 'pos' : v === 0 ? 'zero' : 'neg';
+    html += `<div class="sem-card ${changed?'changed flash':''}">
+      <div class="sem-name">${sd.k} <span style="color:var(--fg3);font-weight:400;">(${sd.d})</span></div>
+      <div class="sem-val ${cls}">${v}</div>
+    </div>`;
+  });
+
+  if (p.svarDesc.length > 0) {
+    html += '<div style="border-top:1px solid var(--border);margin:6px 0;"></div>';
+    p.svarDesc.forEach(sv => {
+      const v = svars[sv.k];
+      const disp = v === null ? '空' : v;
+      html += `<div class="var-card"><div class="var-name">${sv.k} (${sv.d})</div><div class="var-val">${disp}</div></div>`;
+    });
+  }
+
+  html += '</div></div>';
+  el.innerHTML = html;
+}
+
+/* ========== 可视化渲染 ========== */
+function renderViz() {
+  const el = document.getElementById('vizBd');
+  switch(curP) {
+    case 0: renderPC(el); break;
+    case 1: renderRW(el); break;
+    case 2: renderPH(el); break;
+    case 3: renderAO(el); break;
+  }
+}
+
+/* 生产者-消费者 */
+function renderPC(el) {
+  const p = P[0];
+  const buf = p.buf;
+  const size = p.bufSize;
+  const prodSt = pstates[0], consSt = pstates[1];
+  const prodActive = prodSt.step >= 0;
+  const consActive = consSt.step >= 0;
+
+  let h = '<div class="pc-viz">';
+  h += '<div class="pc-label">缓冲区 (容量 ' + size + ')</div>';
+  h += '<div class="buffer-row">';
+  for (let i = 0; i < size; i++) {
+    const filled = i < buf.length;
+    const isIn = i === svars._in % size && prodActive;
+    const isOut = i === svars._out % size && consActive;
+    h += `<div class="buf-cell ${filled?'filled':''}">
+      ${filled?'📦':'<span style="color:var(--fg3);font-size:14px;">-</span>'}
+      ${isIn?'<span class="ptr in-ptr">in↑</span>':''}
+      ${isOut?'<span class="ptr out-ptr">out↑</span>':''}
+    </div>`;
+  }
+  h += '</div>';
+
+  h += '<div class="pc-roles">';
+  h += `<div class="pc-role ${prodActive?'active-prod':''}">
+    <div class="icon" style="color:var(--green);"><i class="fas fa-industry"></i></div>
+    <div class="rname" style="color:var(--green);">生产者</div>
+    <div style="font-size:10px;color:${prodSt.waiting?'var(--coral)':'var(--fg2)'};">${prodSt.step<0?'空闲':prodSt.waiting?'阻塞中':'步骤 '+prodSt.step}</div>
+  </div>`;
+  h += '<div class="pc-arrow"><i class="fas fa-arrows-alt-h"></i></div>';
+  h += `<div class="pc-role ${consActive?'active-cons':''}">
+    <div class="icon" style="color:var(--amber);"><i class="fas fa-shopping-cart"></i></div>
+    <div class="rname" style="color:var(--amber);">消费者</div>
+    <div style="font-size:10px;color:${consSt.waiting?'var(--coral)':'var(--fg2)'};">${consSt.step<0?'空闲':consSt.waiting?'阻塞中':'步骤 '+consSt.step}</div>
+  </div>`;
+  h += '</div></div>';
+  el.innerHTML = h;
+}
+
+/* 读者-写者 */
+function renderRW(el) {
+  const p = P[1];
+  const rc = svars.readcount;
+  const isReading = rc > 0;
+  const writerSt = pstates.find((s,i) => p.procs[i].key === 'w1');
+  const isWriting = writerSt && writerSt.step >= 1 && writerSt.step <= 2 && !writerSt.waiting;
+
+  let h = '<div class="rw-viz">';
+  h += `<div class="rw-file ${isReading?'reading':''} ${isWriting?'writing':''}">
+    <i class="fas fa-file-alt" style="font-size:32px;color:${isWriting?'var(--coral)':isReading?'var(--teal)':'var(--fg3)'};"></i>
+    <span class="file-label">共享数据</span>
+  </div>`;
+
+  if (isReading) {
+    h += `<div style="font-size:12px;color:var(--teal);font-weight:600;">${rc} 个读者正在读取</div>`;
+  }
+  if (isWriting) {
+    h += '<div style="font-size:12px;color:var(--coral);font-weight:600;">写者正在写入</div>';
+  }
+
+  h += '<div class="rw-actors">';
+  p.procs.forEach((proc, pi) => {
+    const st = pstates[pi];
+    const isR = proc.key.startsWith('r');
+    const isW = proc.key.startsWith('w');
+    let cls = '';
+    if (st.step >= 0) {
+      if (st.waiting) cls = 'waiting';
+      else if (isR && st.step >= 4 && st.step <= 4) cls = 'active-r';
+      else if (isR && st.step >= 0 && st.step <= 3) cls = 'active-r';
+      else if (isW && st.step >= 1 && st.step <= 2) cls = 'active-w';
+      else cls = isR ? 'active-r' : 'active-w';
+    }
+    h += `<div class="rw-actor ${cls}">
+      <div class="ai" style="color:${isR?'var(--teal)':'var(--coral)'};"><i class="fas fa-${isR?'user':'pen'}"></i></div>
+      <div style="color:${isR?'var(--teal)':'var(--coral)'};">${proc.name}</div>
+      <div style="font-size:9px;color:var(--fg3);">${st.step<0?'空闲':st.waiting?'阻塞':'步骤'+st.step}</div>
+    </div>`;
+  });
+  h += '</div></div>';
+  el.innerHTML = h;
+}
+
+/* 哲学家进餐 */
+function renderPH(el) {
+  const p = P[2];
+  const cx = 210, cy = 210, r = 125, rs = 85;
+
+  let h = '<div class="ph-viz">';
+  h += '<div class="ph-table"></div>';
+
+  // 哲学家位置
+  for (let i = 0; i < 5; i++) {
+    const angle = (-90 + i * 72) * Math.PI / 180;
+    const x = cx + r * Math.cos(angle) - 27;
+    const y = cy + r * Math.sin(angle) - 27;
+    const st = pstates[i];
+    let cls = 'thinking';
+    if (st.step >= 0) {
+      if (st.step === 0) cls = 'thinking';
+      else if (st.step === 1 || st.step === 2) cls = st.waiting ? 'hungry' : 'hungry';
+      else if (st.step === 3) cls = 'eating';
+      else cls = 'thinking';
+    }
+    h += `<div class="ph-person ${cls}" style="left:${x}px;top:${y}px;">
+      <span style="font-size:14px;">${st.step===3?'🍽️':'🤔'}</span>
+    </div>`;
+    // 名字标签
+    const nx = cx + (r + 28) * Math.cos(angle) - 14;
+    const ny = cy + (r + 28) * Math.sin(angle) - 10;
+    h += `<div class="ph-name" style="left:${nx}px;top:${ny}px;color:${p.procs[i].color};">哲${i}</div>`;
+  }
+
+  // 筷子位置（在相邻哲学家之间）
+  for (let i = 0; i < 5; i++) {
+    const angle = (-90 + i * 72 + 36) * Math.PI / 180;
+    const x = cx + rs * Math.cos(angle) - 4;
+    const y = cy + rs * Math.sin(angle) - 18;
+    const used = sems['c'+i] === 0;
+    h += `<div class="ph-stick ${used?'used':''}" style="left:${x}px;top:${y}px;transform:rotate(${i*72+36}deg);"></div>`;
+  }
+
+  h += '</div>';
+
+  // 筷子状态文字
+  h += '<div style="text-align:center;margin-top:8px;font-size:11px;color:var(--fg2);">';
+  for (let i = 0; i < 5; i++) {
+    const used = sems['c'+i] === 0;
+    h += `<span style="margin:0 6px;color:${used?'var(--green)':'var(--fg3)'};">筷${i}:${used?'占用':'可用'}</span>`;
+  }
+  h += '</div>';
+
+  el.innerHTML = h;
+}
+
+/* 苹果橘子 */
+function renderAO(el) {
+  const plate = svars.plate;
+  const p = P[3];
+
+  let h = '<div class="ao-viz">';
+  h += '<div class="ao-table">';
+
+  // 盘子
+  const plateContent = plate === 'apple' ? '🍎' : plate === 'orange' ? '🍊' : '<span style="color:var(--fg3);font-size:16px;">空</span>';
+  h += `<div class="ao-plate ${plate?'has-item':''}">${plateContent}</div>`;
+
+  // 四个人：围绕盘子对称排列
+  const positions = [
+    {x:35, y:28},   // 爸爸 (左上)
+    {x:191, y:28},  // 妈妈 (右上)
+    {x:35, y:198},  // 女儿 (左下)
+    {x:191, y:198}  // 儿子 (右下)
+  ];
+  const icons = ['👨','👩','👧','👦'];
+
+  p.procs.forEach((proc, pi) => {
+    const st = pstates[pi];
+    const pos = positions[pi];
+    let cls = '';
+    if (st.step >= 0) {
+      cls = st.waiting ? 'blocked' : 'acting';
+    }
+    h += `<div class="ao-person ${cls}" style="left:${pos.x}px;top:${pos.y}px;">
+      <div class="ao-icon">${icons[pi]}</div>
+      <div class="ao-nm" style="color:${proc.color};">${proc.name}</div>
+    </div>`;
+  });
+
+  h += '</div>';
+
+  // 图例
+  h += '<div style="display:flex;gap:16px;justify-content:center;margin-top:6px;font-size:11px;">';
+  h += '<span style="color:var(--green);"><i class="fas fa-circle" style="font-size:6px;margin-right:3px;"></i>执行中</span>';
+  h += '<span style="color:var(--coral);"><i class="fas fa-circle" style="font-size:6px;margin-right:3px;"></i>阻塞</span>';
+  h += '<span style="color:var(--fg3);"><i class="fas fa-circle" style="font-size:6px;margin-right:3px;"></i>空闲</span>';
+  h += '</div>';
+
+  h += '</div>';
+  el.innerHTML = h;
+}
+
+/* 控制面板 */
+function renderCtrl() {
+  const p = P[curP];
+  const el = document.getElementById('ctrlBar');
+  let h = '';
+
+  // 每个进程的步进按钮
+  p.procs.forEach((proc, pi) => {
+    const st = pstates[pi];
+    const blocked = st.waiting;
+    h += `<button class="cb" style="${blocked?'border-color:var(--coral);color:var(--coral);':''}" onclick="advance('${proc.key}')" title="${proc.name}步进">
+      <i class="fas fa-${blocked?'pause':'step-forward'}"></i> ${proc.name} <span class="kh">${proc.shortcut}</span>
+    </button>`;
+  });
+
+  h += '<div class="sep"></div>';
+  h += `<button class="cb ${autoOn?'active':''}" onclick="toggleAuto()"><i class="fas fa-${autoOn?'pause':'play'}"></i> 自动 <span class="kh">Space</span></button>`;
+  h += '<div class="speed"><span>速度</span><input type="range" min="1" max="10" value="5" id="speedSlider"></div>';
+  h += '<div class="sep"></div>';
+  h += '<button class="cb" onclick="resetState()"><i class="fas fa-undo"></i> 重置 <span class="kh">X</span></button>';
+  h += '<button class="cb" onclick="runDemo()" style="border-color:var(--amber);color:var(--amber);"><i class="fas fa-bug"></i> 问题演示 <span class="kh">D</span></button>';
+
+  el.innerHTML = h;
+}
+
+function renderLogs() {
+  const el = document.getElementById('logBd');
+  el.innerHTML = logs.map(l => {
+    const tc = l.type === 'sys' ? 'color:var(--fg2)' : l.type === 'wrn' ? 'color:var(--coral)' : `color:${P[curP].procs[l.type]?.color || 'var(--fg)'}`;
+    return `<div class="le"><span class="lt">#${l.id}</span><span style="${tc}">${l.msg}</span></div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ========== 辅助函数 ========== */
+function addLog(msg, type) {
+  logCnt++;
+  logs.push({id:logCnt, msg, type});
+  if (logs.length > 80) logs.shift();
+}
+
+function toast(msg, type='wrn') {
+  const box = document.getElementById('toastBox');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = `<i class="fas fa-${type==='err'?'exclamation-circle':type==='suc'?'check-circle':'exclamation-triangle'}"></i> ${msg}`;
+  box.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+function resetState() {
+  if (autoOn) toggleAuto();
+  if (demoTm) { clearTimeout(demoTm); demoTm = null; }
+  switchProblem(curP);
+}
+
+function toggleAuto() {
+  autoOn = !autoOn;
+  if (autoOn) autoStep();
+  else if (autoTm) { clearTimeout(autoTm); autoTm = null; }
+  renderCtrl();
+}
+
+function autoStep() {
+  if (!autoOn) return;
+  const p = P[curP];
+  const speed = document.getElementById('speedSlider').value;
+  const interval = 1100 - speed * 100;
+
+  // 策略：优先步进非阻塞进程，交替进行
+  const keys = p.procs.map(pr => pr.key);
+  const nonBlocked = keys.filter((k,i) => !pstates[i].waiting);
+  const blocked = keys.filter((k,i) => pstates[i].waiting);
+  const idle = keys.filter((k,i) => pstates[i].step === -1);
+
+  let pick;
+  if (nonBlocked.length > 0) {
+    // 交替选择非阻塞进程
+    pick = nonBlocked[autoOn ? Math.floor(Math.random() * nonBlocked.length) : 0];
+  } else if (blocked.length > 0) {
+    pick = blocked[0]; // 尝试唤醒
+  } else {
+    pick = keys[0];
+  }
+
+  advance(pick);
+  autoTm = setTimeout(autoStep, interval);
+}
+
+function runDemo() {
+  if (autoOn) toggleAuto();
+  resetState();
+  const p = P[curP];
+  const seq = p.demo;
+  let i = 0;
+  addLog('开始问题演示...', 'sys');
+
+  function step() {
+    if (i >= seq.length) { addLog('演示结束', 'sys'); return; }
+    advance(seq[i]);
+    i++;
+    const speed = document.getElementById('speedSlider').value;
+    demoTm = setTimeout(step, 1000 - speed * 80);
+  }
+  step();
+}
+
+/* ========== 键盘事件 ========== */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  const p = P[curP];
+
+  // 数字1-4切换问题
+  if (e.key >= '1' && e.key <= '4' && !e.ctrlKey) {
+    switchProblem(parseInt(e.key) - 1);
+    return;
+  }
+
+  // 空格自动运行
+  if (e.key === ' ') { e.preventDefault(); toggleAuto(); return; }
+  if (e.key === 'x' || e.key === 'X') { resetState(); return; }
+  if (e.key === 'd' || e.key === 'D') { runDemo(); return; }
+
+  // 进程快捷键
+  const proc = p.procs.find(pr => pr.shortcut.toLowerCase() === e.key.toLowerCase());
+  if (proc) advance(proc.key);
+
+  // 哲学家数字键
+  if (curP === 2 && e.key >= '1' && e.key <= '5') {
+    advance('ph' + (parseInt(e.key) - 1));
+  }
+});
+
+/* ========== 初始化 ========== */
+switchProblem(0);
+</script>
+</body>
+</html>

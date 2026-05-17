@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>分段存储管理（Segmentation）— 408操作系统</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #dbeafe;
+            --secondary: #7c3aed;
+            --accent: #059669;
+            --danger: #dc2626;
+            --warning: #d97706;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #f1f5f9;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+        }
+
+        .nav {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 0 2rem;
+        }
+        .nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; height: 60px; gap: 2rem; }
+        .nav-title { font-weight: 700; font-size: 1.1rem; color: var(--primary); text-decoration: none; white-space: nowrap; }
+        .nav-links { display: flex; gap: 1.5rem; list-style: none; }
+        .nav-links a { text-decoration: none; color: var(--text-light); font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--primary); }
+        .nav-links a.active { color: var(--primary); font-weight: 700; position: relative; }
+        .nav-links a.active::after { content: ''; position: absolute; bottom: -4px; left: 0; right: 0; height: 2px; background: var(--primary); border-radius: 1px; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 100px 2rem 4rem; }
+        .section { margin-bottom: 5rem; scroll-margin-top: 80px; }
+        .section-title { font-size: 2rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: 0.75rem; }
+        .section-title .icon { width: 40px; height: 40px; background: var(--primary-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        .section-subtitle { color: var(--text-light); font-size: 1.1rem; margin-bottom: 2rem; }
+
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); }
+        .card-subtitle { font-size: 0.95rem; color: var(--text-light); margin-bottom: 1.5rem; }
+
+        .highlight-box {
+            background: linear-gradient(135deg, var(--primary-light) 0%, #eff6ff 100%);
+            border-left: 4px solid var(--primary);
+            padding: 1.25rem 1.5rem;
+            border-radius: 0 12px 12px 0;
+            margin: 1.5rem 0;
+        }
+        .highlight-box.warning { background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%); border-left-color: var(--warning); }
+        .highlight-box.danger { background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%); border-left-color: var(--danger); }
+        .highlight-box.accent { background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%); border-left-color: var(--accent); }
+
+        table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: 0.95rem; }
+        th { background: var(--code-bg); padding: 0.875rem 1rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--border); }
+        td { padding: 0.875rem 1rem; border-bottom: 1px solid var(--border); }
+        tr:hover td { background: var(--bg); }
+
+        .tag {
+            display: inline-block; padding: 0.25rem 0.75rem; border-radius: 20px;
+            font-size: 0.8rem; font-weight: 600; margin-right: 0.5rem;
+        }
+        .tag-blue { background: var(--primary-light); color: var(--primary); }
+        .tag-purple { background: #ede9fe; color: var(--secondary); }
+        .tag-green { background: #d1fae5; color: var(--accent); }
+        .tag-red { background: #fee2e2; color: var(--danger); }
+        .tag-orange { background: #fef3c7; color: var(--warning); }
+
+        .svg-container {
+            background: var(--card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+        }
+        .svg-caption { text-align: center; color: var(--text-light); font-size: 0.9rem; margin-top: 1rem; font-style: italic; }
+
+        .compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+        .compare-card { background: var(--card); border-radius: 12px; border: 2px solid var(--border); padding: 1.5rem; }
+
+        code {
+            background: var(--code-bg); padding: 0.2rem 0.4rem; border-radius: 4px;
+            font-family: "SF Mono", Monaco, monospace; font-size: 0.9em; color: var(--danger);
+        }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .container { padding: 80px 1rem 2rem; }
+            .section-title { font-size: 1.5rem; }
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .card { animation: fadeIn 0.5s ease-out; }
+    </style>
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-inner">
+        <a href="memory_management.html" class="nav-title">408 内存管理</a>
+        <ul class="nav-links">
+            <li><a href="memory_management.html">主页</a></li>
+            <li><a href="paging.html">分页</a></li>
+            <li><a href="segmentation.html" class="active">分段</a></li>
+            <li><a href="seg-paging.html">段页式</a></li>
+        </ul>
+    </div>
+</nav>
+
+<div class="container">
+
+<!-- ==================== 标题 ==================== -->
+<div style="margin-bottom: 3rem;">
+    <h1 style="font-size: 2rem; font-weight: 800; color: var(--secondary);">分段存储管理（Segmentation）</h1>
+    <p style="color: var(--text-light); font-size: 1.1rem; margin-top: 0.5rem;">按逻辑意义划分 · 二维地址空间 · 支持共享与保护</p>
+</div>
+
+<!-- 1. 核心概念 -->
+<div class="card">
+    <h2 class="card-title">1. 核心概念与引入原因</h2>
+
+    <div class="highlight-box">
+        <strong>分页的问题：</strong>分页是「物理切割」，一页中可能混杂代码和数据，无法按程序逻辑进行保护。<br>
+        例如：无法单独将「代码段」设为只读，因为代码和数据可能混在同一页中。
+    </div>
+
+    <div class="compare-grid">
+        <div class="compare-card" style="border-color:#dbeafe;">
+            <h3 style="color:#1e40af;">程序员视角</h3>
+            <p>分段是<strong>二维地址空间</strong>。程序员使用 <code>&lt;段号, 段内偏移&gt;</code> 来寻址，而非一维线性地址。</p>
+            <p style="margin-top:0.5rem; font-size:0.9rem; color:var(--text-light);">如：代码段第100条指令 → (0, 100)；数据段第20个变量 → (1, 20)</p>
+        </div>
+        <div class="compare-card" style="border-color:#e9d5ff;">
+            <h3 style="color:#5b21b6;">编译器/链接器视角</h3>
+            <p>编译器自然按逻辑生成不同段（.text代码, .data数据, .bss未初始化, .stack栈）。</p>
+            <p style="margin-top:0.5rem; font-size:0.9rem; color:var(--text-light);">分段与程序的自然结构完全吻合，便于模块化管理和链接。</p>
+        </div>
+    </div>
+
+    <div class="svg-container">
+        <svg viewBox="0 0 900 280" style="width:100%; max-width:900px; margin:0 auto; display:block;">
+            <defs>
+                <marker id="arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+                </marker>
+            </defs>
+            <text x="450" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">分段地址结构（二维）</text>
+            <defs>
+                <clipPath id="seg-clip"><rect x="100" y="50" width="700" height="60" rx="8"/></clipPath>
+            </defs>
+            <rect x="100" y="50" width="700" height="60" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+            <g clip-path="url(#seg-clip)">
+                <rect x="100" y="50" width="250" height="60" fill="#ede9fe"/>
+                <rect x="350" y="50" width="450" height="60" fill="#dbeafe"/>
+            </g>
+            <rect x="100" y="50" width="250" height="60" rx="8" fill="none" stroke="#7c3aed" stroke-width="2"/>
+            <rect x="350" y="50" width="450" height="60" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+            <text x="225" y="80" text-anchor="middle" font-size="16" font-weight="700" fill="#5b21b6">段号 S</text>
+            <text x="225" y="100" text-anchor="middle" font-size="12" fill="#7c3aed">标识逻辑段（代码/数据/栈）</text>
+            <text x="575" y="80" text-anchor="middle" font-size="16" font-weight="700" fill="#1e40af">段内偏移 W</text>
+            <text x="575" y="100" text-anchor="middle" font-size="12" fill="#3b82f6">从段基址开始的偏移量</text>
+            <line x1="350" y1="50" x2="350" y2="110" stroke="#1e293b" stroke-width="2"/>
+            <text x="450" y="150" text-anchor="middle" font-size="14" fill="#475569">物理地址 = <tspan font-weight="700" fill="#7c3aed">段基址</tspan> + <tspan font-weight="700" fill="#2563eb">段内偏移 W</tspan></text>
+            <text x="450" y="180" text-anchor="middle" font-size="13" fill="#dc2626" font-weight="600">与分页的本质区别：分页是「替换」（页号→页框号），分段是「加法」（基址+偏移）</text>
+            <rect x="200" y="210" width="500" height="55" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="1"/>
+            <text x="450" y="235" text-anchor="middle" font-size="13" font-weight="600" fill="#92400e">段表项结构：段号 | 段基址 | 段长（限长）| 存取权限 | 存在位 | ...</text>
+            <text x="450" y="255" text-anchor="middle" font-size="12" fill="#b45309">段长用于越界检查，权限位用于保护，基址用于地址计算</text>
+        </svg>
+        <div class="svg-caption">图3-1：分段二维地址结构。段号决定查哪一段，偏移决定段内位置</div>
+    </div>
+</div>
+
+<!-- 2. 地址变换 -->
+<div class="card">
+    <h2 class="card-title">2. 地址变换与越界检查</h2>
+    <p class="card-subtitle">分段有两重越界检查：段号越界 + 段内偏移越界</p>
+
+    <div class="svg-container">
+    <svg viewBox="0 0 900 480" style="width:100%; max-width:900px; margin:0 auto; display:block;">
+        <defs>
+            <marker id="arrow" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+            </marker>
+
+            <marker id="arrow-blue" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+            </marker>
+
+            <marker id="arrow-red" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/>
+            </marker>
+
+            <marker id="arrow-green" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#059669"/>
+            </marker>
+
+            <marker id="arrow-amber" viewBox="0 0 10 10" markerWidth="8" markerHeight="8" refX="9" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                <path d="M0,0 L10,5 L0,10 z" fill="#d97706"/>
+            </marker>
+        </defs>
+
+        <!-- 标题 -->
+        <text x="350" y="22" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">
+            分段地址变换与越界检查
+        </text>
+
+        <!-- 逻辑地址 -->
+        <rect x="280" y="35" width="140" height="32" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1"/>
+
+        <text x="350" y="56" text-anchor="middle" font-size="13" font-family="monospace" fill="#5b21b6">
+            &lt;S, W&gt;
+        </text>
+
+        <!-- 向下箭头 -->
+        <path d="M350 67 L350 90" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+        <!-- 检查1 -->
+        <rect x="220" y="95" width="260" height="38" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+
+        <text x="350" y="112" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">
+            检查1：段号 S &lt; 段表长度？
+        </text>
+
+        <text x="350" y="127" text-anchor="middle" font-size="9" fill="#dc2626">
+            否 → 越界中断
+        </text>
+
+        <!-- 检查1 否分支 -->
+        <path d="M480 114 L530 114" stroke="#dc2626" stroke-width="1.5" fill="none" stroke-dasharray="4" marker-end="url(#arrow-red)"/>
+
+        <text x="505" y="108" text-anchor="middle" font-size="10" fill="#dc2626">
+            否
+        </text>
+
+        <!-- 越界中断 -->
+        <rect x="530" y="95" width="90" height="28" rx="6" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+
+        <text x="575" y="114" text-anchor="middle" font-size="10" fill="#dc2626">
+            越界中断
+        </text>
+
+        <!-- 向下 -->
+        <path d="M350 133 L350 160" stroke="#2563eb" stroke-width="2" fill="none" marker-end="url(#arrow-blue)"/>
+
+        <text x="375" y="152" text-anchor="start" font-size="11" fill="#2563eb" font-weight="600">
+            S索引
+        </text>
+
+        <!-- 段表 -->
+        <rect x="250" y="165" width="200" height="100" rx="8" fill="#f1f5f9" stroke="#64748b" stroke-width="2"/>
+
+        <text x="350" y="188" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">
+            段表（内存中）
+        </text>
+
+        <line x1="260" y1="198" x2="440" y2="198" stroke="#cbd5e1"/>
+
+        <text x="350" y="218" text-anchor="middle" font-size="11" font-family="monospace" fill="#475569">
+            段号 | 基址 | 段长 | 权限
+        </text>
+
+        <text x="350" y="238" text-anchor="middle" font-size="11" font-family="monospace" fill="#475569">
+             0  |  1K  | 500 | R/X
+        </text>
+
+        <text x="350" y="255" text-anchor="middle" font-size="11" font-family="monospace" fill="#475569">
+             1  |  6K  | 300 | R/W
+        </text>
+
+        <!-- 到检查2 -->
+        <path d="M350 265 L350 290" stroke="#dc2626" stroke-width="2" fill="none" marker-end="url(#arrow-red)"/>
+
+        <text x="375" y="282" text-anchor="start" font-size="10" fill="#dc2626">
+            段长
+        </text>
+
+        <!-- 检查2 -->
+        <rect x="220" y="295" width="260" height="38" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+
+        <text x="350" y="312" text-anchor="middle" font-size="12" font-weight="600" fill="#991b1b">
+            检查2：偏移 W &lt; 段长？
+        </text>
+
+        <text x="350" y="327" text-anchor="middle" font-size="9" fill="#dc2626">
+            否 → 越界中断
+        </text>
+
+        <!-- 检查2 否分支 -->
+        <path d="M480 314 L530 314" stroke="#dc2626" stroke-width="1.5" fill="none" stroke-dasharray="4" marker-end="url(#arrow-red)"/>
+
+        <text x="505" y="308" text-anchor="middle" font-size="10" fill="#dc2626">
+            否
+        </text>
+
+        <!-- 越界中断 -->
+        <rect x="530" y="295" width="90" height="28" rx="6" fill="#fee2e2" stroke="#fca5a5" stroke-width="1"/>
+
+        <text x="575" y="314" text-anchor="middle" font-size="10" fill="#dc2626">
+            越界中断
+        </text>
+
+        <!-- 到检查3 -->
+        <path d="M350 333 L350 360" stroke="#d97706" stroke-width="2" fill="none" marker-end="url(#arrow-amber)"/>
+
+        <!-- 检查3 -->
+        <rect x="220" y="365" width="260" height="38" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+
+        <text x="350" y="382" text-anchor="middle" font-size="12" font-weight="600" fill="#92400e">
+            检查3：操作是否符合权限位？
+        </text>
+
+        <text x="350" y="397" text-anchor="middle" font-size="9" fill="#b45309">
+            否 → 保护中断
+        </text>
+
+        <!-- 检查3 否分支 -->
+        <path d="M480 384 L530 384" stroke="#d97706" stroke-width="1.5" fill="none" stroke-dasharray="4" marker-end="url(#arrow-amber)"/>
+
+        <text x="505" y="378" text-anchor="middle" font-size="10" fill="#d97706">
+            否
+        </text>
+
+        <!-- 保护中断 -->
+        <rect x="530" y="365" width="90" height="28" rx="6" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+
+        <text x="575" y="384" text-anchor="middle" font-size="10" fill="#d97706">
+            保护中断
+        </text>
+
+        <!-- 到物理地址 -->
+        <path d="M350 403 L350 425" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrow-green)"/>
+
+        <text x="375" y="418" text-anchor="start" font-size="10" fill="#059669">
+            基址
+        </text>
+
+        <!-- 基址+W -->
+        <rect x="660" y="165" width="190" height="50" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+
+        <text x="755" y="188" text-anchor="middle" font-size="14" font-weight="600" fill="#065f46">
+            基址 + W
+        </text>
+
+        <text x="755" y="208" text-anchor="middle" font-size="11" fill="#059669">
+            = 物理地址
+        </text>
+
+        <!-- 段表到物理地址 -->
+        <path d="M450 190 L660 190" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrow-green)"/>
+
+        <text x="555" y="183" text-anchor="middle" font-size="10" fill="#059669" font-weight="600">
+            段表取出基址
+        </text>
+
+        <!-- 物理内存 -->
+        <rect x="660" y="230" width="190" height="60" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+
+        <text x="755" y="255" text-anchor="middle" font-size="13" font-weight="600" fill="#065f46">
+            物理内存
+        </text>
+
+        <text x="755" y="278" text-anchor="middle" font-size="11" fill="#059669">
+            目标数据/指令
+        </text>
+
+        <!-- 到物理内存 -->
+        <path d="M755 215 L755 230" stroke="#059669" stroke-width="2" fill="none" marker-end="url(#arrow-green)"/>
+
+        <!-- 底部说明 -->
+        <rect x="220" y="430" width="500" height="30" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+
+        <text x="470" y="450" text-anchor="middle" font-size="12" fill="#475569">
+            流程：逻辑地址 &lt;S,W&gt; → 查段表 → 三重检查（段号/偏移/权限）→ 基址+W → 物理地址
+        </text>
+    </svg>
+
+    <div class="svg-caption">
+        图3-2：分段地址变换。两重越界检查（段号、偏移）+ 权限检查，均通过后才计算物理地址
+    </div>
+</div>
+</div>
+
+<!-- 3. 共享与保护 -->
+<div class="card">
+    <h2 class="card-title">3. 段的共享与保护（重点）</h2>
+
+    <h3 style="margin:1.5rem 0 0.75rem; color:var(--secondary);">3.1 段的共享</h3>
+    <p>不同进程的段表中，建立指向<strong>相同物理基址</strong>的段表项，即可实现共享。</p>
+
+    <div class="svg-container">
+        <svg viewBox="0 0 900 300" style="width:100%; max-width:900px; margin:0 auto; display:block;">
+            <defs><marker id="arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>
+            <text x="450" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">段的共享机制（以共享printf库为例）</text>
+            <rect x="80" y="50" width="200" height="130" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+            <text x="180" y="75" text-anchor="middle" font-size="14" font-weight="600" fill="#1e40af">进程A 段表</text>
+            <line x1="90" y1="85" x2="270" y2="85" stroke="#bfdbfe"/>
+            <text x="180" y="105" text-anchor="middle" font-size="11" font-family="monospace" fill="#1d4ed8">0:代码段 → 基址1K</text>
+            <text x="180" y="125" text-anchor="middle" font-size="11" font-family="monospace" fill="#1d4ed8">1:数据段 → 基址5K</text>
+            <text x="180" y="145" text-anchor="middle" font-size="11" font-family="monospace" fill="#dc2626">2:printf → 基址20K</text>
+            <text x="180" y="165" text-anchor="middle" font-size="10" fill="#64748b">共享段（只读）</text>
+            <rect x="620" y="50" width="200" height="130" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+            <text x="720" y="75" text-anchor="middle" font-size="14" font-weight="600" fill="#065f46">进程B 段表</text>
+            <line x1="630" y1="85" x2="810" y2="85" stroke="#a7f3d0"/>
+            <text x="720" y="105" text-anchor="middle" font-size="11" font-family="monospace" fill="#065f46">0:代码段 → 基址8K</text>
+            <text x="720" y="125" text-anchor="middle" font-size="11" font-family="monospace" fill="#065f46">1:数据段 → 基址12K</text>
+            <text x="720" y="145" text-anchor="middle" font-size="11" font-family="monospace" fill="#dc2626">2:printf → 基址20K</text>
+            <text x="720" y="165" text-anchor="middle" font-size="10" fill="#64748b">共享段（只读）</text>
+            <rect x="350" y="100" width="200" height="80" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+            <text x="450" y="125" text-anchor="middle" font-size="14" font-weight="600" fill="#92400e">物理内存</text>
+            <text x="450" y="148" text-anchor="middle" font-size="12" fill="#b45309">printf库代码段</text>
+            <text x="450" y="168" text-anchor="middle" font-size="11" font-family="monospace" fill="#d97706">基址: 20K，长度: 4K</text>
+            <path d="M280 140 L350 140" stroke="#2563eb" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <path d="M620 140 L550 140" stroke="#059669" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <rect x="150" y="210" width="600" height="70" rx="8" fill="#f0fdf4" stroke="#86efac"/>
+            <text x="450" y="235" text-anchor="middle" font-size="13" fill="#166534" font-weight="600">共享段在物理内存中只有一份副本，节省空间</text>
+            <text x="450" y="260" text-anchor="middle" font-size="12" fill="#15803d">分页难以实现此共享：共享代码和数据可能混在同一页中，无法单独提取代码页共享</text>
+        </svg>
+        <div class="svg-caption">图3-3：分段共享。两进程段表指向相同物理基址，内存中只有一份副本</div>
+    </div>
+
+    <h3 style="margin:1.5rem 0 0.75rem; color:var(--secondary);">3.2 段的保护（四层机制）</h3>
+
+    <table>
+        <tr><th>保护机制</th><th>检查时机</th><th>实现方式</th><th>失败后果</th></tr>
+        <tr><td><span class="tag tag-red">越界保护</span></td><td>地址变换时</td><td>段号 &lt; 段表长度；段内偏移 &lt; 段长（限长寄存器）</td><td>越界中断（trap）</td></tr>
+        <tr><td><span class="tag tag-orange">存取权限</span></td><td>每次访问时</td><td>段表项中的 R/W/X 位。代码段=R/X，数据段=R/W，栈段=R/W</td><td>保护中断（protection fault）</td></tr>
+        <tr><td><span class="tag tag-purple">环保护</span></td><td>跨段访问时</td><td>x86 Ring 0~3。低环可访问高环数据，反之不行。OS内核在R0，用户程序在R3</td><td>通用保护故障（GP fault）</td></tr>
+        <tr><td><span class="tag tag-blue">共享保护</span></td><td>共享段写入时</td><td>共享段通常设为只读(R)。若需写共享，需配合信号量等同步机制</td><td>写保护中断 或 数据不一致</td></tr>
+    </table>
+
+    <div class="svg-container">
+        <svg viewBox="0 0 900 260" style="width:100%; max-width:900px; margin:0 auto; display:block;">
+            <defs><marker id="arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>
+            <text x="450" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">环保护机制（Rings）示意</text>
+            <circle cx="450" cy="140" r="50" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+            <text x="450" y="135" text-anchor="middle" font-size="13" font-weight="700" fill="#991b1b">Ring 0</text>
+            <text x="450" y="155" text-anchor="middle" font-size="10" fill="#dc2626">OS内核</text>
+            <circle cx="450" cy="140" r="80" fill="#fef3c7" stroke="#d97706" stroke-width="2" fill-opacity="0.3"/>
+            <text x="530" y="100" text-anchor="middle" font-size="11" fill="#b45309">Ring 1</text>
+            <text x="530" y="115" text-anchor="middle" font-size="10" fill="#d97706">设备驱动</text>
+            <circle cx="450" cy="140" r="110" fill="#dbeafe" stroke="#2563eb" stroke-width="2" fill-opacity="0.2"/>
+            <text x="580" y="75" text-anchor="middle" font-size="11" fill="#1d4ed8">Ring 2</text>
+            <circle cx="450" cy="140" r="140" fill="#dcfce7" stroke="#059669" stroke-width="2" fill-opacity="0.15"/>
+            <text x="610" y="55" text-anchor="middle" font-size="11" fill="#065f46">Ring 3</text>
+            <text x="610" y="70" text-anchor="middle" font-size="10" fill="#059669">用户程序</text>
+            <path d="M680 140 L750 140" stroke="#059669" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <text x="780" y="135" text-anchor="start" font-size="12" fill="#059669">允许访问</text>
+            <text x="780" y="155" text-anchor="start" font-size="11" fill="#64748b">R3 → R0 数据</text>
+            <path d="M220 140 L290 140" stroke="#dc2626" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <text x="120" y="135" text-anchor="start" font-size="12" fill="#dc2626">禁止访问</text>
+            <text x="120" y="155" text-anchor="start" font-size="11" fill="#64748b">R3程序不能直接读R0内核段</text>
+        </svg>
+        <div class="svg-caption">图3-4：环保护。特权级内环可访问外环，反之不行，防止用户程序破坏内核</div>
+    </div>
+</div>
+
+<!-- 导航回主页 -->
+<div style="text-align:center; padding:2rem 0; color:var(--text-light); border-top:1px solid var(--border); margin-top:2rem;">
+    <p style="font-size:0.9rem;">
+        <a href="paging.html" style="color:var(--primary); text-decoration:none; font-weight:600;">← 学习分页</a>
+        <span style="margin:0 1rem;">|</span>
+        <a href="memory_management.html" style="color:var(--text-light); text-decoration:none;">返回主页</a>
+        <span style="margin:0 1rem;">|</span>
+        <a href="seg-paging.html" style="color:var(--accent); text-decoration:none; font-weight:600;">学习段页式 →</a>
+    </p>
+</div>
+
+</div><!-- container -->
+
+</body>
+</html>

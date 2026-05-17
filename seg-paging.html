@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>段页式存储管理（Segmented Paging）— 408操作系统</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #dbeafe;
+            --secondary: #7c3aed;
+            --accent: #059669;
+            --danger: #dc2626;
+            --warning: #d97706;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+            --border: #e2e8f0;
+            --code-bg: #f1f5f9;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans SC", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.8;
+        }
+
+        .nav {
+            position: fixed; top: 0; left: 0; right: 0;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
+            z-index: 1000;
+            padding: 0 2rem;
+        }
+        .nav-inner { max-width: 1200px; margin: 0 auto; display: flex; align-items: center; height: 60px; gap: 2rem; }
+        .nav-title { font-weight: 700; font-size: 1.1rem; color: var(--primary); text-decoration: none; white-space: nowrap; }
+        .nav-links { display: flex; gap: 1.5rem; list-style: none; }
+        .nav-links a { text-decoration: none; color: var(--text-light); font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--primary); }
+        .nav-links a.active { color: var(--primary); font-weight: 700; position: relative; }
+        .nav-links a.active::after { content: ''; position: absolute; bottom: -4px; left: 0; right: 0; height: 2px; background: var(--primary); border-radius: 1px; }
+
+        .container { max-width: 1100px; margin: 0 auto; padding: 100px 2rem 4rem; }
+        .section { margin-bottom: 5rem; scroll-margin-top: 80px; }
+        .section-title { font-size: 2rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); display: flex; align-items: center; gap: 0.75rem; }
+        .section-title .icon { width: 40px; height: 40px; background: var(--primary-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+        .section-subtitle { color: var(--text-light); font-size: 1.1rem; margin-bottom: 2rem; }
+
+        .card {
+            background: var(--card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: var(--text); }
+        .card-subtitle { font-size: 0.95rem; color: var(--text-light); margin-bottom: 1.5rem; }
+
+        .highlight-box {
+            background: linear-gradient(135deg, var(--primary-light) 0%, #eff6ff 100%);
+            border-left: 4px solid var(--primary);
+            padding: 1.25rem 1.5rem;
+            border-radius: 0 12px 12px 0;
+            margin: 1.5rem 0;
+        }
+        .highlight-box.warning { background: linear-gradient(135deg, #fef3c7 0%, #fffbeb 100%); border-left-color: var(--warning); }
+        .highlight-box.danger { background: linear-gradient(135deg, #fee2e2 0%, #fef2f2 100%); border-left-color: var(--danger); }
+        .highlight-box.accent { background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%); border-left-color: var(--accent); }
+
+        .svg-container {
+            background: var(--card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+            overflow-x: auto;
+        }
+        .svg-caption { text-align: center; color: var(--text-light); font-size: 0.9rem; margin-top: 1rem; font-style: italic; }
+
+        .compare-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin: 2rem 0; }
+        .compare-card { background: var(--card); border-radius: 12px; border: 2px solid var(--border); padding: 1.5rem; transition: transform 0.2s, border-color 0.2s; }
+        .compare-card:hover { transform: translateY(-2px); }
+
+        ul { margin-left: 1.2rem; color: var(--text); font-size: 0.95rem; }
+        ul li { margin-bottom: 0.4rem; }
+
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .container { padding: 80px 1rem 2rem; }
+            .section-title { font-size: 1.5rem; }
+        }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .card { animation: fadeIn 0.5s ease-out; }
+    </style>
+</head>
+<body>
+
+<nav class="nav">
+    <div class="nav-inner">
+        <a href="memory_management.html" class="nav-title">408 内存管理</a>
+        <ul class="nav-links">
+            <li><a href="memory_management.html">主页</a></li>
+            <li><a href="paging.html">分页</a></li>
+            <li><a href="segmentation.html">分段</a></li>
+            <li><a href="seg-paging.html" class="active">段页式</a></li>
+        </ul>
+    </div>
+</nav>
+
+<div class="container">
+
+<!-- ==================== 标题 ==================== -->
+<div style="margin-bottom: 3rem;">
+    <h1 style="font-size: 2rem; font-weight: 800; color: var(--accent);">段页式存储管理（Segmented Paging）</h1>
+    <p style="color: var(--text-light); font-size: 1.1rem; margin-top: 0.5rem;">先分段后分页 · 二维逻辑地址 · 三次访存</p>
+</div>
+
+<!-- 1. 引入原因 -->
+<div class="card">
+    <h2 class="card-title">1. 引入原因与设计思想</h2>
+
+    <div class="highlight-box">
+        <strong>分段的问题：</strong>段长不固定，产生<strong>外碎片</strong>；且段长可能很大（如代码段数MB），不便于整体换入换出。<br>
+        <strong>分页的问题：</strong>不反映程序逻辑结构，共享和保护困难。<br>
+        <strong>段页式的折中：</strong>对外，程序员/编译器按逻辑分段（共享保护便利）；对内，每段再分页装入页框（消除外碎片）。
+    </div>
+
+    <div class="svg-container">
+        <svg viewBox="0 0 900 200" style="width:100%; max-width:900px; margin:0 auto; display:block;">
+            <text x="450" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">段页式地址结构（三维逻辑，一维物理）</text>
+            <defs>
+                <clipPath id="segpage-clip"><rect x="50" y="50" width="800" height="60" rx="8"/></clipPath>
+            </defs>
+            <rect x="50" y="50" width="800" height="60" rx="8" fill="#f8fafc" stroke="#94a3b8" stroke-width="2"/>
+            <g clip-path="url(#segpage-clip)">
+                <rect x="50" y="50" width="200" height="60" fill="#ede9fe"/>
+                <rect x="250" y="50" width="250" height="60" fill="#dbeafe"/>
+                <rect x="500" y="50" width="350" height="60" fill="#dcfce7"/>
+            </g>
+            <rect x="50" y="50" width="200" height="60" rx="8" fill="none" stroke="#7c3aed" stroke-width="2"/>
+            <rect x="250" y="50" width="250" height="60" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+            <rect x="500" y="50" width="350" height="60" rx="8" fill="none" stroke="#059669" stroke-width="2"/>
+            <text x="150" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#5b21b6">段号 S</text>
+            <text x="150" y="100" text-anchor="middle" font-size="11" fill="#7c3aed">标识逻辑段</text>
+            <text x="375" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#1e40af">页号 P</text>
+            <text x="375" y="100" text-anchor="middle" font-size="11" fill="#3b82f6">段内第几页</text>
+            <text x="675" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#065f46">页内偏移 W</text>
+            <text x="675" y="100" text-anchor="middle" font-size="11" fill="#10b981">定位页内字节</text>
+            <line x1="250" y1="50" x2="250" y2="110" stroke="#1e293b" stroke-width="2"/>
+            <line x1="500" y1="50" x2="500" y2="110" stroke="#1e293b" stroke-width="2"/>
+            <text x="450" y="140" text-anchor="middle" font-size="14" fill="#475569">对用户仍是<strong>二维地址</strong> &lt;S, (P,W)&gt;；系统内部将 (P,W) 视为分页的一维处理</text>
+            <text x="450" y="170" text-anchor="middle" font-size="13" fill="#dc2626" font-weight="600">物理地址 = 页框号 × 页大小 + W（与纯分页的物理地址计算完全一致）</text>
+        </svg>
+        <div class="svg-caption">图4-1：段页式地址结构。段号+页号+偏移，对用户呈现二维，物理管理一维</div>
+    </div>
+</div>
+
+<!-- 2. 地址变换 -->
+<div class="card">
+    <h2 class="card-title">2. 地址变换机构（三次访存）</h2>
+    <p class="card-subtitle">段表 → 页表 → 目标数据，无TLB时需三次访问内存</p>
+
+    <div class="svg-container">
+        <svg viewBox="0 0 950 480" style="width:100%; max-width:950px; margin:0 auto; display:block;">
+            <defs>
+                <marker id="arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="8" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                    <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+                </marker>
+            </defs>
+            <text x="475" y="25" text-anchor="middle" font-size="16" font-weight="700" fill="#1e293b">段页式地址变换完整流程（无TLB）</text>
+            <rect x="390" y="45" width="170" height="35" rx="6" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1"/>
+            <text x="475" y="68" text-anchor="middle" font-size="13" font-family="monospace" fill="#5b21b6">&lt;S, P, W&gt;</text>
+            <path d="M475 85 L475 105" stroke="#64748b" stroke-width="2" fill="none"/>
+            <rect x="100" y="115" width="200" height="90" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+            <text x="200" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">① 查段表</text>
+            <line x1="110" y1="150" x2="290" y2="150" stroke="#bfdbfe"/>
+            <text x="200" y="170" text-anchor="middle" font-size="11" font-family="monospace" fill="#1d4ed8">段号S → 页表始址</text>
+            <text x="200" y="190" text-anchor="middle" font-size="11" font-family="monospace" fill="#1d4ed8">+ 页表长度</text>
+            <path d="M390 120 L300 120 L300 140" stroke="#2563eb" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <text x="345" y="115" text-anchor="middle" font-size="11" fill="#2563eb" font-weight="600">第1次访存</text>
+            <rect x="375" y="115" width="200" height="90" rx="8" fill="#dcfce7" stroke="#059669" stroke-width="2"/>
+            <text x="475" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#065f46">② 查页表</text>
+            <line x1="385" y1="150" x2="565" y2="150" stroke="#a7f3d0"/>
+            <text x="475" y="170" text-anchor="middle" font-size="11" font-family="monospace" fill="#065f46">页号P → 页框号</text>
+            <text x="475" y="190" text-anchor="middle" font-size="11" font-family="monospace" fill="#065f46">（页表始址+P×项长）</text>
+            <path d="M300 160 L375 160" stroke="#059669" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <text x="335" y="155" text-anchor="middle" font-size="11" fill="#059669" font-weight="600">第2次访存</text>
+            <rect x="650" y="115" width="200" height="90" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+            <text x="750" y="140" text-anchor="middle" font-size="13" font-weight="600" fill="#92400e">③ 访问目标</text>
+            <line x1="660" y1="150" x2="840" y2="150" stroke="#fcd34d"/>
+            <text x="750" y="170" text-anchor="middle" font-size="11" font-family="monospace" fill="#b45309">页框号×页大小+W</text>
+            <text x="750" y="190" text-anchor="middle" font-size="11" font-family="monospace" fill="#b45309">= 物理地址</text>
+            <path d="M575 160 L650 160" stroke="#d97706" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrow)"/>
+            <text x="610" y="155" text-anchor="middle" font-size="11" fill="#d97706" font-weight="600">第3次访存</text>
+            <rect x="50" y="230" width="400" height="80" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+            <text x="250" y="255" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">段表项（与纯分段不同！）</text>
+            <text x="250" y="278" text-anchor="middle" font-size="12" font-family="monospace" fill="#475569">段号 | 页表始址 | 页表长度 | 存在位 | 权限位</text>
+            <text x="250" y="298" text-anchor="middle" font-size="11" fill="#64748b">注意：段表项中不再是「段基址」，而是「页表始址」</text>
+            <rect x="500" y="230" width="400" height="80" rx="8" fill="#f1f5f9" stroke="#cbd5e1"/>
+            <text x="700" y="255" text-anchor="middle" font-size="13" font-weight="600" fill="#334155">页表项（与纯分页相同）</text>
+            <text x="700" y="278" text-anchor="middle" font-size="12" font-family="monospace" fill="#475569">页号 | 页框号 | 存在位 | 修改位 | 访问位 | ...</text>
+            <text x="700" y="298" text-anchor="middle" font-size="11" fill="#64748b">与请求分页的页表项结构一致</text>
+            <rect x="150" y="330" width="650" height="50" rx="8" fill="#ecfdf5" stroke="#86efac"/>
+            <text x="475" y="355" text-anchor="middle" font-size="13" fill="#166534" font-weight="600">优化：引入TLB后，若段号+页号同时命中，可一次得到页框号，仅需2次访存（TLB查+取数据）</text>
+            <text x="475" y="375" text-anchor="middle" font-size="12" fill="#15803d">现代CPU中，TLB通常以「虚页号（段号+页号拼接）」为索引，同时覆盖段页式场景</text>
+            <rect x="200" y="400" width="550" height="60" rx="8" fill="#fee2e2" stroke="#fca5a5"/>
+            <text x="475" y="425" text-anchor="middle" font-size="14" fill="#991b1b" font-weight="700">访存次数总结：无TLB = 3次；TLB命中 = 2次；纯分页无TLB = 2次；纯分页TLB命中 = 1次</text>
+            <text x="475" y="448" text-anchor="middle" font-size="12" fill="#dc2626">段页式是效率换功能的典型设计——用多一次访存换取分段的逻辑优势</text>
+        </svg>
+        <div class="svg-caption">图4-2：段页式三次访存。段表得页表地址→页表得页框号→拼接后访存取数</div>
+    </div>
+</div>
+
+<!-- 3. 优缺点 -->
+<div class="card">
+    <h2 class="card-title">3. 段页式的优缺点</h2>
+
+    <div class="compare-grid">
+        <div class="compare-card" style="border-color:#86efac; background:linear-gradient(135deg, #f0fdf4, #ffffff);">
+            <h3 style="color:#166534;">优点</h3>
+            <ul>
+                <li>保留分段的<strong>逻辑独立性</strong>，便于模块化编译、链接</li>
+                <li>支持按段<strong>共享</strong>（如共享库只需共享对应段）</li>
+                <li>支持按段<strong>保护</strong>（不同段设置不同R/W/X权限）</li>
+                <li>分页后<strong>无外碎片</strong>，内存利用率高</li>
+                <li>支持虚拟存储（段内请求调页）</li>
+            </ul>
+        </div>
+        <div class="compare-card" style="border-color:#fca5a5; background:linear-gradient(135deg, #fef2f2, #ffffff);">
+            <h3 style="color:#991b1b;">缺点</h3>
+            <ul>
+                <li>地址变换需<strong>三次访存</strong>（段表→页表→数据），效率低于纯分页</li>
+                <li>页表数量多（每个段一张页表），管理开销大</li>
+                <li>段表本身需连续存储（或再分页，进入递归）</li>
+                <li>硬件实现复杂（需同时支持段表和页表机制）</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- 导航回主页 -->
+<div style="text-align:center; padding:2rem 0; color:var(--text-light); border-top:1px solid var(--border); margin-top:2rem;">
+    <p style="font-size:0.9rem;">
+        <a href="segmentation.html" style="color:var(--secondary); text-decoration:none; font-weight:600;">← 学习分段</a>
+        <span style="margin:0 1rem;">|</span>
+        <a href="memory_management.html" style="color:var(--text-light); text-decoration:none;">返回主页</a>
+        <span style="margin:0 1rem;">|</span>
+        <a href="memory_management.html#calc" style="color:var(--primary); text-decoration:none; font-weight:600;">地址计算器 →</a>
+    </p>
+</div>
+
+</div><!-- container -->
+
+</body>
+</html>

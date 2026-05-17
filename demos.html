@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>交互演示 — My Blog</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="particles"></canvas>
+
+  <nav class="navbar" id="navbar">
+    <div class="nav-brand">
+      <a href="index.html">My Blog</a>
+    </div>
+    <button class="nav-toggle" id="navToggle" aria-label="菜单">
+      <span></span><span></span><span></span>
+    </button>
+    <ul class="nav-links" id="navLinks">
+      <li><a href="index.html">首页</a></li>
+      <li><a href="posts.html">笔记</a></li>
+      <li><a href="demos.html" class="active">演示</a></li>
+      <li><a href="index.html#about">关于</a></li>
+    </ul>
+  </nav>
+
+  <section class="demos-section" id="demos">
+    <h2 class="section-title">交互演示</h2>
+    <p class="section-subtitle">操作系统可视化与交互式 Demo</p>
+
+    <div class="category-tabs" id="categoryTabs">
+      <button class="cat-tab active" data-cat="all">全部</button>
+      <button class="cat-tab" data-cat="进程">进程</button>
+      <button class="cat-tab" data-cat="内存">内存</button>
+      <button class="cat-tab" data-cat="文件">文件</button>
+    </div>
+
+    <div class="demos-grid" id="demosGrid"></div>
+  </section>
+
+  <footer class="footer">
+    <p>&copy; 2026 My Blog. Powered by GitHub Pages.</p>
+  </footer>
+
+  <script src="js/particles.js"></script>
+  <script src="js/nav.js"></script>
+  <script>
+    const DEMOS = [
+      {
+        id: "critical-section",
+        title: "临界区互斥软件实现方法可视化",
+        file: "临界区互斥软件实现方法可视化.html",
+        category: "进程",
+        tags: ["临界区", "互斥"],
+        excerpt: "可视化展示 Peterson 算法、Dekker 算法等软件实现临界区互斥的方法。",
+      },
+      {
+        id: "ult-vs-klt",
+        title: "ULT vs KLT 对比",
+        file: "ULT-vs-KLT-对比.html",
+        category: "进程",
+        tags: ["线程", "操作系统"],
+        excerpt: "用户级线程与内核级线程的全方位对比，包括创建、调度、并发等维度。",
+      },
+      {
+        id: "process-sync",
+        title: "经典进程同步问题可视化",
+        file: "经典进程同步问题可视化.html",
+        category: "进程",
+        tags: ["同步", "互斥"],
+        excerpt: "生产者-消费者、读者-写者、哲学家就餐等经典同步问题的可视化演示。",
+      },
+      {
+        id: "segmentation",
+        title: "分段存储管理",
+        file: "segmentation.html",
+        category: "内存",
+        tags: ["分段", "内存管理"],
+        excerpt: "分段存储管理的地址转换、段表结构及保护机制详解。",
+      },
+      {
+        id: "seg-paging",
+        title: "段页式存储管理",
+        file: "seg-paging.html",
+        category: "内存",
+        tags: ["段页式", "内存管理"],
+        excerpt: "段页式存储管理的地址转换流程与优势分析。",
+      },
+      {
+        id: "disk-organization",
+        title: "外存组织方式",
+        file: "外存组织方式.html",
+        category: "文件",
+        tags: ["外存", "文件系统"],
+        excerpt: "连续分配、链接分配、索引分配等外存组织方式的对比与可视化。",
+      },
+    ];
+
+    const categoryIcons = {
+      "进程": "P",
+      "内存": "M",
+      "文件": "F",
+    };
+
+    /* ===== 渲染卡片 ===== */
+    const demosGrid = document.getElementById("demosGrid");
+    const categoryTabs = document.getElementById("categoryTabs");
+    let currentCat = "all";
+
+    function renderDemos(cat) {
+      demosGrid.innerHTML = "";
+      const filtered = cat === "all" ? DEMOS : DEMOS.filter((d) => d.category === cat);
+      filtered.forEach((demo) => {
+        const card = document.createElement("a");
+        card.className = "demo-card";
+        card.href = demo.file;
+        card.dataset.category = demo.category;
+        card.innerHTML = `
+          <div class="demo-icon">${categoryIcons[demo.category] || "D"}</div>
+          <span class="demo-cat">${demo.category}</span>
+          <div class="demo-title">${demo.title}</div>
+          <div class="demo-excerpt">${demo.excerpt}</div>
+          <div class="demo-tags">
+            ${demo.tags.map((t) => `<span class="tag">${t}</span>`).join("")}
+          </div>
+        `;
+        demosGrid.appendChild(card);
+      });
+    }
+
+    categoryTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest(".cat-tab");
+      if (!btn) return;
+      categoryTabs.querySelectorAll(".cat-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentCat = btn.dataset.cat;
+      renderDemos(currentCat);
+    });
+
+    renderDemos("all");
+  </script>
+</body>
+</html>

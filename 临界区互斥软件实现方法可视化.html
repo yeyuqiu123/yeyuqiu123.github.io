@@ -1,0 +1,1234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>临界区互斥 - 软件实现方法可视化</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;600;700;900&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0e17;
+      --bg2: #0f1523;
+      --card: #131a2b;
+      --card2: #182038;
+      --border: #1e2d4a;
+      --border2: #2a3f6a;
+      --fg: #c9d1d9;
+      --fg2: #8b949e;
+      --fg3: #484f58;
+      --title: #e6edf3;
+      --p0: #00e5a0;
+      --p0-dim: #00e5a033;
+      --p0-bg: #00e5a00d;
+      --p1: #ff5757;
+      --p1-dim: #ff575733;
+      --p1-bg: #ff57570d;
+      --warn: #ffc107;
+      --warn-dim: #ffc10733;
+      --danger: #ff3b3b;
+      --safe: #00e5a0;
+      --code-bg: #0b101e;
+      --zone-idle: #2a2f3a;
+      --zone-enter: #3d3520;
+      --zone-critical: #3d2020;
+      --zone-exit: #1d3040;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: 'Noto Sans SC', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    /* 背景网格效果 */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 30%, rgba(0,229,160,0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(255,87,87,0.03) 0%, transparent 50%),
+        linear-gradient(rgba(30,45,74,0.15) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(30,45,74,0.15) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app { position: relative; z-index: 1; max-width: 1600px; margin: 0 auto; padding: 22px 28px; }
+
+    /* 顶栏 */
+    header { text-align: center; margin-bottom: 26px; }
+    header h1 {
+      font-size: 34px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: var(--title);
+      margin-bottom: 6px;
+    }
+    header h1 span { color: var(--p0); }
+    header .subtitle { font-size: 15px; color: var(--fg2); font-weight: 300; letter-spacing: 1px; }
+
+    /* 方法切换 */
+    .method-tabs {
+      display: flex; justify-content: center; gap: 10px;
+      margin: 20px 0 24px; flex-wrap: wrap;
+    }
+    .method-tab {
+      padding: 10px 26px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--fg2);
+      cursor: pointer;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.3s;
+      font-family: inherit;
+      position: relative;
+      overflow: hidden;
+    }
+    .method-tab::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--p0-dim), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .method-tab:hover { border-color: var(--border2); color: var(--fg); }
+    .method-tab:hover::before { opacity: 1; }
+    .method-tab.active {
+      border-color: var(--p0);
+      color: var(--p0);
+      background: var(--card2);
+      box-shadow: 0 0 20px var(--p0-dim);
+    }
+    .method-tab.active::before { opacity: 1; }
+    .method-tab .tab-key {
+      display: inline-block;
+      background: rgba(255,255,255,0.08);
+      border-radius: 3px;
+      padding: 2px 8px;
+      font-size: 13px;
+      margin-right: 6px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* 主区域 */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 14px 14px;
+      margin-bottom: 20px;
+    }
+    #p0Panel {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    #p1Panel {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .center-panel {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+
+    /* 代码面板 */
+    .code-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .panel-header {
+      padding: 14px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .panel-header.p0 { color: var(--p0); background: var(--p0-bg); }
+    .panel-header.p1 { color: var(--p1); background: var(--p1-bg); }
+    .panel-header .dot {
+      width: 12px; height: 12px; border-radius: 50%;
+    }
+    .panel-header.p0 .dot { background: var(--p0); box-shadow: 0 0 8px var(--p0); }
+    .panel-header.p1 .dot { background: var(--p1); box-shadow: 0 0 8px var(--p1); }
+
+    .code-body {
+      padding: 14px 0;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 15px;
+      line-height: 2.2;
+    }
+    .code-line {
+      padding: 4px 18px 4px 24px;
+      position: relative;
+      transition: all 0.3s;
+      white-space: pre;
+      border-left: 3px solid transparent;
+    }
+    .code-line .line-num {
+      display: inline-block;
+      width: 24px;
+      color: var(--fg3);
+      font-size: 13px;
+      text-align: right;
+      margin-right: 14px;
+      user-select: none;
+    }
+    .code-line.active-p0 {
+      background: var(--p0-bg);
+      border-left-color: var(--p0);
+    }
+    .code-line.active-p0 .line-num { color: var(--p0); }
+    .code-line.active-p1 {
+      background: var(--p1-bg);
+      border-left-color: var(--p1);
+    }
+    .code-line.active-p1 .line-num { color: var(--p1); }
+    .code-line .keyword { color: #c678dd; }
+    .code-line .var-name { color: #e5c07b; }
+    .code-line .op { color: #56b6c2; }
+    .code-line .num { color: #d19a66; }
+    .code-line .comment { color: var(--fg3); font-style: italic; }
+    .code-line .critical-text { color: var(--warn); font-weight: 700; }
+
+    /* 进程状态标签 */
+    .proc-state {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .state-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .state-badge.idle { background: rgba(42,47,58,0.8); color: var(--fg3); }
+    .state-badge.entering { background: rgba(61,53,32,0.8); color: var(--warn); }
+    .state-badge.critical { background: rgba(61,32,32,0.8); color: var(--danger); }
+    .state-badge.exiting { background: rgba(29,48,64,0.8); color: #56b6c2; }
+    .state-badge.waiting { background: rgba(61,32,32,0.6); color: var(--danger); animation: pulse-badge 1s infinite; }
+
+    @keyframes pulse-badge {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    /* 中间面板 */
+    .center-panel {
+      display: grid;
+      grid-template-columns: 1fr 1.5fr;
+      grid-template-rows: auto auto;
+      gap: 10px;
+    }
+    .vars-panel {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .track-panel {
+      grid-column: 2;
+      grid-row: 1 / 3;
+    }
+    .alert-panel {
+      grid-column: 1;
+      grid-row: 2;
+    }
+    .desc-panel {
+      grid-column: 1 / -1;
+      grid-row: 3;
+    }
+
+    /* 标志位面板 */
+    .vars-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .vars-panel .panel-header {
+      color: var(--title);
+      background: var(--card2);
+    }
+    .vars-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+      gap: 12px;
+      padding: 18px;
+    }
+    .var-card {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      text-align: center;
+      transition: all 0.4s;
+    }
+    .var-card.changed {
+      border-color: var(--warn);
+      box-shadow: 0 0 15px var(--warn-dim);
+      animation: var-flash 0.5s;
+    }
+    @keyframes var-flash {
+      0% { transform: scale(1); }
+      30% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+    .var-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: var(--fg2);
+      margin-bottom: 8px;
+    }
+    .var-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      transition: all 0.3s;
+    }
+    .var-value.true-val { color: var(--p0); }
+    .var-value.false-val { color: var(--fg3); }
+    .var-value.num-val { color: #d19a66; }
+
+    /* 进程位置可视化 */
+    .track-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      flex: 1;
+    }
+    .track-panel .panel-header {
+      color: var(--title);
+      background: var(--card2);
+    }
+    .tracks-container { padding: 20px; display: flex; flex-direction: column; gap: 24px; }
+
+    .process-track {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .track-label {
+      width: 32px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .track-label.p0 { color: var(--p0); }
+    .track-label.p1 { color: var(--p1); }
+
+    .track-zones {
+      flex: 1;
+      display: flex;
+      gap: 4px;
+      position: relative;
+      height: 52px;
+    }
+    .track-zone {
+      flex: 1;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      position: relative;
+      transition: all 0.3s;
+    }
+    .zone-idle { background: var(--zone-idle); color: #555; }
+    .zone-enter { background: var(--zone-enter); color: #a89040; }
+    .zone-critical { background: var(--zone-critical); color: #c05050; }
+    .zone-exit { background: var(--zone-exit); color: #5090b0; }
+
+    .zone-critical.has-process { box-shadow: inset 0 0 15px rgba(255,59,59,0.3); }
+
+    .track-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: left 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+      z-index: 5;
+      font-size: 11px;
+      font-weight: 900;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .track-arrow.p0 {
+      background: var(--p0);
+      color: var(--bg);
+      box-shadow: 0 0 12px var(--p0-dim), 0 0 25px var(--p0-dim);
+    }
+    .track-arrow.p1 {
+      background: var(--p1);
+      color: #fff;
+      box-shadow: 0 0 12px var(--p1-dim), 0 0 25px var(--p1-dim);
+    }
+    .track-arrow.waiting {
+      animation: dot-pulse 0.8s infinite;
+    }
+    @keyframes dot-pulse {
+      0%, 100% { transform: translateY(-50%) scale(1); opacity: 1; }
+      50% { transform: translateY(-50%) scale(0.8); opacity: 0.6; }
+    }
+
+    /* 警告面板 */
+    .alert-panel {
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 15px;
+      line-height: 1.6;
+      display: none;
+      animation: alert-in 0.4s;
+    }
+    @keyframes alert-in {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .alert-panel.violation {
+      display: block;
+      background: rgba(255,59,59,0.1);
+      border: 1px solid rgba(255,59,59,0.4);
+      color: #ff6b6b;
+    }
+    .alert-panel.deadlock {
+      display: block;
+      background: rgba(255,193,7,0.1);
+      border: 1px solid rgba(255,193,7,0.4);
+      color: var(--warn);
+    }
+    .alert-panel.info {
+      display: block;
+      background: rgba(0,229,160,0.08);
+      border: 1px solid rgba(0,229,160,0.3);
+      color: var(--p0);
+    }
+    .alert-panel i { margin-right: 6px; }
+
+    /* 方法说明面板 */
+    .desc-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .desc-panel h3 {
+      font-size: 16px;
+      color: var(--title);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .desc-panel p {
+      font-size: 14px;
+      color: var(--fg2);
+      line-height: 1.7;
+      margin-bottom: 6px;
+    }
+    .desc-panel .problem-tag {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .problem-tag.bad { background: rgba(255,59,59,0.15); color: #ff6b6b; }
+    .problem-tag.good { background: rgba(0,229,160,0.1); color: var(--p0); }
+
+    /* 控制面板 */
+    .controls-bar {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .ctrl-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card2);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: inherit;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ctrl-btn:hover { border-color: var(--border2); background: var(--border); }
+    .ctrl-btn:active { transform: scale(0.96); }
+    .ctrl-btn.p0-btn:hover { border-color: var(--p0); color: var(--p0); }
+    .ctrl-btn.p1-btn:hover { border-color: var(--p1); color: var(--p1); }
+    .ctrl-btn.danger-btn:hover { border-color: var(--danger); color: var(--danger); }
+    .ctrl-btn.auto-btn.active { border-color: var(--p0); color: var(--p0); background: var(--p0-bg); }
+    .ctrl-btn .key-hint {
+      background: rgba(255,255,255,0.06);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .ctrl-sep { width: 1px; height: 28px; background: var(--border); margin: 0 4px; }
+    .speed-control {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 14px; color: var(--fg2);
+    }
+    .speed-control input[type="range"] {
+      width: 100px; accent-color: var(--p0);
+    }
+
+    /* 日志面板 */
+    .log-panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .log-panel .panel-header {
+      color: var(--fg2);
+      background: var(--card2);
+      font-size: 14px;
+    }
+    .log-body {
+      padding: 12px 16px;
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+    .log-body::-webkit-scrollbar { width: 5px; }
+    .log-body::-webkit-scrollbar-track { background: transparent; }
+    .log-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .log-entry { opacity: 0; animation: log-in 0.3s forwards; }
+    @keyframes log-in { to { opacity: 1; } }
+    .log-entry .log-time { color: var(--fg3); margin-right: 8px; }
+    .log-entry.p0-log .log-msg { color: var(--p0); }
+    .log-entry.p1-log .log-msg { color: var(--p1); }
+    .log-entry.sys-log .log-msg { color: var(--warn); }
+    .log-entry.ok-log .log-msg { color: var(--safe); }
+
+    /* Toast通知 */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .toast {
+      padding: 12px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      animation: toast-in 0.3s, toast-out 0.3s 2.5s forwards;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .toast.warn { background: #3d3520; color: var(--warn); border: 1px solid rgba(255,193,7,0.3); }
+    .toast.error { background: #3d2020; color: #ff6b6b; border: 1px solid rgba(255,59,59,0.3); }
+    .toast.success { background: #1d3d2a; color: var(--p0); border: 1px solid rgba(0,229,160,0.3); }
+    @keyframes toast-in { from { opacity: 0; transform: translateX(40px); } }
+    @keyframes toast-out { to { opacity: 0; transform: translateX(40px); } }
+
+    /* 响应式 */
+    @media (max-width: 1000px) {
+      .main-grid { grid-template-columns: 1fr; }
+      #p0Panel { grid-column: 1; grid-row: 1; }
+      #p1Panel { grid-column: 1; grid-row: 2; }
+      .center-panel { grid-column: 1; grid-row: 3; grid-template-columns: 1fr; }
+      .vars-panel, .track-panel, .alert-panel, .desc-panel { grid-column: 1; grid-row: auto; }
+      .code-panel { max-height: 200px; overflow-y: auto; }
+    }
+
+    /* 减弱动画偏好 */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>临界区互斥 <span>软件实现方法</span></h1>
+      <p class="subtitle">操作系统 · 进程互斥 · 四种软件方法对比与可视化</p>
+    </header>
+
+    <nav class="method-tabs" id="methodTabs" role="tablist" aria-label="选择方法"></nav>
+
+    <section class="main-grid" aria-label="主要内容">
+      <article class="code-panel" id="p0Panel">
+        <div class="panel-header p0"><span class="dot"></span> 进程 P0</div>
+        <div class="code-body" id="p0Code"></div>
+        <div class="proc-state" id="p0State"></div>
+      </article>
+
+      <div class="center-panel">
+        <div class="vars-panel">
+          <div class="panel-header"><i class="fas fa-database" style="margin-right:6px;font-size:12px;"></i> 标志位状态</div>
+          <div class="vars-grid" id="varsGrid"></div>
+        </div>
+
+        <div class="track-panel">
+          <div class="panel-header"><i class="fas fa-arrows-alt-h" style="margin-right:6px;font-size:12px;"></i> 进程位置</div>
+          <div class="tracks-container" id="tracksContainer"></div>
+        </div>
+
+        <div class="alert-panel" id="alertPanel"></div>
+
+        <div class="desc-panel" id="descPanel"></div>
+      </div>
+
+      <article class="code-panel" id="p1Panel">
+        <div class="panel-header p1"><span class="dot"></span> 进程 P1</div>
+        <div class="code-body" id="p1Code"></div>
+        <div class="proc-state" id="p1State"></div>
+      </article>
+    </section>
+
+    <div class="controls-bar" role="toolbar" aria-label="控制面板">
+      <button class="ctrl-btn p0-btn" onclick="advanceProcess('p0')" title="P0前进一步">
+        <i class="fas fa-step-forward"></i> P0 步进 <span class="key-hint">A</span>
+      </button>
+      <button class="ctrl-btn p1-btn" onclick="advanceProcess('p1')" title="P1前进一步">
+        <i class="fas fa-step-forward"></i> P1 步进 <span class="key-hint">L</span>
+      </button>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn auto-btn" id="autoBtn" onclick="toggleAuto()" title="自动运行">
+        <i class="fas fa-play"></i> 自动 <span class="key-hint">Space</span>
+      </button>
+      <div class="speed-control">
+        <span>速度</span>
+        <input type="range" min="1" max="10" value="5" id="speedSlider" aria-label="自动运行速度">
+      </div>
+      <div class="ctrl-sep"></div>
+      <button class="ctrl-btn" onclick="resetState()" title="重置">
+        <i class="fas fa-undo"></i> 重置 <span class="key-hint">R</span>
+      </button>
+      <button class="ctrl-btn danger-btn" onclick="demoProblem()" title="演示该方法的问题">
+        <i class="fas fa-bug"></i> 问题演示 <span class="key-hint">D</span>
+      </button>
+    </div>
+
+    <div class="log-panel">
+      <div class="panel-header"><i class="fas fa-terminal" style="margin-right:6px;font-size:11px;"></i> 操作日志</div>
+      <div class="log-body" id="logBody"></div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    /* ========== 四种方法的数据定义 ========== */
+    const METHODS = [
+      {
+        id: 1,
+        name: '单标志法',
+        fullName: '单标志法（严格轮转）',
+        desc: '设置公用整型变量 turn，指示允许进入临界区的进程编号。每个进程进入前检查是否轮到自己。',
+        problem: '违反"空闲让进"：必须严格交替进入。若 P0 不想进入，P1 即使反复请求也无法再进入。',
+        advantage: '保证互斥',
+        tagType: 'bad',
+        vars: { turn: 0 },
+        varDefs: [
+          { name: 'turn', key: 'turn', desc: '允许进入的进程号', init: 0, type: 'num' }
+        ],
+        codeP0: [
+          { html: '<span class="keyword">while</span> (turn <span class="op">!=</span> <span class="num">0</span>);', plain: 'while (turn != 0);' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'turn <span class="op">=</span> <span class="num">1</span>;', plain: 'turn = 1;' },
+        ],
+        codeP1: [
+          { html: '<span class="keyword">while</span> (turn <span class="op">!=</span> <span class="num">1</span>);', plain: 'while (turn != 1);' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'turn <span class="op">=</span> <span class="num">0</span>;', plain: 'turn = 0;' },
+        ],
+        stepsP0: [
+          { line: 0, action: null, wait: v => v.turn !== 0, state: 'entering', desc: '检查 turn != 0', waitDesc: 'turn=' + '${turn}' + '≠0, 等待...' },
+          { line: 1, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 2, action: v => { v.turn = 1; }, wait: null, state: 'exiting', desc: 'turn = 1' },
+        ],
+        stepsP1: [
+          { line: 0, action: null, wait: v => v.turn !== 1, state: 'entering', desc: '检查 turn != 1', waitDesc: 'turn=' + '${turn}' + '≠1, 等待...' },
+          { line: 1, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 2, action: v => { v.turn = 0; }, wait: null, state: 'exiting', desc: 'turn = 0' },
+        ],
+        demo: ['p0','p0','p0','p0'] // P0执行一轮后想再进但turn=1，无法进入
+      },
+      {
+        id: 2,
+        name: '双标志先检查',
+        fullName: '双标志先检查法',
+        desc: '先检查对方 flag 是否为 true（想进入），再将自己的 flag 设为 true。"先检查，后上锁"。',
+        problem: '违反"忙则等待"（互斥）：若 P0 和 P1 几乎同时检查到对方 flag 为 false，两者都会将自己的 flag 置 true 并进入临界区。',
+        advantage: '空闲时任意进程可进入',
+        tagType: 'bad',
+        vars: { flag0: false, flag1: false },
+        varDefs: [
+          { name: 'flag[0]', key: 'flag0', desc: 'P0 想进入临界区', init: false, type: 'bool' },
+          { name: 'flag[1]', key: 'flag1', desc: 'P1 想进入临界区', init: false, type: 'bool' }
+        ],
+        codeP0: [
+          { html: '<span class="keyword">while</span> (flag[<span class="num">1</span>]);', plain: 'while (flag[1]);' },
+          { html: 'flag[<span class="num">0</span>] <span class="op">=</span> <span class="keyword">true</span>;', plain: 'flag[0] = true;' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'flag[<span class="num">0</span>] <span class="op">=</span> <span class="keyword">false</span>;', plain: 'flag[0] = false;' },
+        ],
+        codeP1: [
+          { html: '<span class="keyword">while</span> (flag[<span class="num">0</span>]);', plain: 'while (flag[0]);' },
+          { html: 'flag[<span class="num">1</span>] <span class="op">=</span> <span class="keyword">true</span>;', plain: 'flag[1] = true;' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'flag[<span class="num">1</span>] <span class="op">=</span> <span class="keyword">false</span>;', plain: 'flag[1] = false;' },
+        ],
+        stepsP0: [
+          { line: 0, action: null, wait: v => v.flag1 === true, state: 'entering', desc: '检查 flag[1]', waitDesc: 'flag[1]=true, 等待...' },
+          { line: 1, action: v => { v.flag0 = true; }, wait: null, state: 'entering', desc: 'flag[0] = true' },
+          { line: 2, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 3, action: v => { v.flag0 = false; }, wait: null, state: 'exiting', desc: 'flag[0] = false' },
+        ],
+        stepsP1: [
+          { line: 0, action: null, wait: v => v.flag0 === true, state: 'entering', desc: '检查 flag[0]', waitDesc: 'flag[0]=true, 等待...' },
+          { line: 1, action: v => { v.flag1 = true; }, wait: null, state: 'entering', desc: 'flag[1] = true' },
+          { line: 2, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 3, action: v => { v.flag1 = false; }, wait: null, state: 'exiting', desc: 'flag[1] = false' },
+        ],
+        demo: ['p0','p1','p0','p1','p0','p1'] // 两者都进入临界区
+      },
+      {
+        id: 3,
+        name: '双标志后检查',
+        fullName: '双标志后检查法',
+        desc: '先将自身 flag 设为 true（表示想进入），再检查对方 flag。"先上锁，后检查"。',
+        problem: '可能产生死锁（饥饿）：若 P0 和 P1 几乎同时将 flag 置 true，再检查对方时都为 true，双方永远等待。',
+        advantage: '不会同时进入临界区',
+        tagType: 'bad',
+        vars: { flag0: false, flag1: false },
+        varDefs: [
+          { name: 'flag[0]', key: 'flag0', desc: 'P0 想进入临界区', init: false, type: 'bool' },
+          { name: 'flag[1]', key: 'flag1', desc: 'P1 想进入临界区', init: false, type: 'bool' }
+        ],
+        codeP0: [
+          { html: 'flag[<span class="num">0</span>] <span class="op">=</span> <span class="keyword">true</span>;', plain: 'flag[0] = true;' },
+          { html: '<span class="keyword">while</span> (flag[<span class="num">1</span>]);', plain: 'while (flag[1]);' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'flag[<span class="num">0</span>] <span class="op">=</span> <span class="keyword">false</span>;', plain: 'flag[0] = false;' },
+        ],
+        codeP1: [
+          { html: 'flag[<span class="num">1</span>] <span class="op">=</span> <span class="keyword">true</span>;', plain: 'flag[1] = true;' },
+          { html: '<span class="keyword">while</span> (flag[<span class="num">0</span>]);', plain: 'while (flag[0]);' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'flag[<span class="num">1</span>] <span class="op">=</span> <span class="keyword">false</span>;', plain: 'flag[1] = false;' },
+        ],
+        stepsP0: [
+          { line: 0, action: v => { v.flag0 = true; }, wait: null, state: 'entering', desc: 'flag[0] = true' },
+          { line: 1, action: null, wait: v => v.flag1 === true, state: 'entering', desc: '检查 flag[1]', waitDesc: 'flag[1]=true, 等待...' },
+          { line: 2, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 3, action: v => { v.flag0 = false; }, wait: null, state: 'exiting', desc: 'flag[0] = false' },
+        ],
+        stepsP1: [
+          { line: 0, action: v => { v.flag1 = true; }, wait: null, state: 'entering', desc: 'flag[1] = true' },
+          { line: 1, action: null, wait: v => v.flag0 === true, state: 'entering', desc: '检查 flag[0]', waitDesc: 'flag[0]=true, 等待...' },
+          { line: 2, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 3, action: v => { v.flag1 = false; }, wait: null, state: 'exiting', desc: 'flag[1] = false' },
+        ],
+        demo: ['p0','p1','p0','p1'] // 死锁
+      },
+      {
+        id: 4,
+        name: 'Peterson算法',
+        fullName: 'Peterson 算法',
+        desc: '结合双标志和轮转思想：先设置自身 flag 为 true，再将 turn 让给对方，然后同时检查对方 flag 和 turn。',
+        problem: '无问题！正确实现了互斥、空闲让进、有限等待三大原则。',
+        advantage: '完美解决互斥问题',
+        tagType: 'good',
+        vars: { flag0: false, flag1: false, turn: 0 },
+        varDefs: [
+          { name: 'flag[0]', key: 'flag0', desc: 'P0 想进入临界区', init: false, type: 'bool' },
+          { name: 'flag[1]', key: 'flag1', desc: 'P1 想进入临界区', init: false, type: 'bool' },
+          { name: 'turn', key: 'turn', desc: '让对方先进入', init: 0, type: 'num' }
+        ],
+        codeP0: [
+          { html: 'flag[<span class="num">0</span>] <span class="op">=</span> <span class="keyword">true</span>;', plain: 'flag[0] = true;' },
+          { html: 'turn <span class="op">=</span> <span class="num">1</span>;', plain: 'turn = 1;' },
+          { html: '<span class="keyword">while</span> (flag[<span class="num">1</span>] <span class="op">&&</span> turn <span class="op">==</span> <span class="num">1</span>);', plain: 'while (flag[1] && turn == 1);' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'flag[<span class="num">0</span>] <span class="op">=</span> <span class="keyword">false</span>;', plain: 'flag[0] = false;' },
+        ],
+        codeP1: [
+          { html: 'flag[<span class="num">1</span>] <span class="op">=</span> <span class="keyword">true</span>;', plain: 'flag[1] = true;' },
+          { html: 'turn <span class="op">=</span> <span class="num">0</span>;', plain: 'turn = 0;' },
+          { html: '<span class="keyword">while</span> (flag[<span class="num">0</span>] <span class="op">&&</span> turn <span class="op">==</span> <span class="num">0</span>);', plain: 'while (flag[0] && turn == 0);' },
+          { html: '<span class="critical-text">临界区</span>;', plain: '临界区;' },
+          { html: 'flag[<span class="num">1</span>] <span class="op">=</span> <span class="keyword">false</span>;', plain: 'flag[1] = false;' },
+        ],
+        stepsP0: [
+          { line: 0, action: v => { v.flag0 = true; }, wait: null, state: 'entering', desc: 'flag[0] = true' },
+          { line: 1, action: v => { v.turn = 1; }, wait: null, state: 'entering', desc: 'turn = 1' },
+          { line: 2, action: null, wait: v => v.flag1 && v.turn === 1, state: 'entering', desc: '检查 flag[1] && turn==1', waitDesc: 'flag[1]=true 且 turn=1, 等待...' },
+          { line: 3, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 4, action: v => { v.flag0 = false; }, wait: null, state: 'exiting', desc: 'flag[0] = false' },
+        ],
+        stepsP1: [
+          { line: 0, action: v => { v.flag1 = true; }, wait: null, state: 'entering', desc: 'flag[1] = true' },
+          { line: 1, action: v => { v.turn = 0; }, wait: null, state: 'entering', desc: 'turn = 0' },
+          { line: 2, action: null, wait: v => v.flag0 && v.turn === 0, state: 'entering', desc: '检查 flag[0] && turn==0', waitDesc: 'flag[0]=true 且 turn=0, 等待...' },
+          { line: 3, action: null, wait: null, state: 'critical', desc: '进入临界区' },
+          { line: 4, action: v => { v.flag1 = false; }, wait: null, state: 'exiting', desc: 'flag[1] = false' },
+        ],
+        demo: ['p0','p0','p1','p1','p0','p0','p1'] // Peterson正确工作演示
+      }
+    ];
+
+    /* ========== 全局状态 ========== */
+    let currentMethod = 0;
+    let vars = {};           // 当前标志位变量
+    let prevVars = {};       // 上一步的标志位（用于检测变化）
+    let p0 = { step: -1, waiting: false, state: 'idle' };
+    let p1 = { step: -1, waiting: false, state: 'idle' };
+    let autoPlaying = false;
+    let autoTimer = null;
+    let demoTimer = null;
+    let logs = [];
+    let logCounter = 0;
+
+    /* ========== 工具函数 ========== */
+    function deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+    function showToast(msg, type = 'warn') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `<i class="fas fa-${type === 'error' ? 'exclamation-circle' : type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i> ${msg}`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function addLog(msg, type = 'p0') {
+      logCounter++;
+      logs.push({ id: logCounter, msg, type });
+      if (logs.length > 50) logs.shift();
+      renderLogs();
+    }
+
+    /* ========== 切换方法 ========== */
+    function switchMethod(idx) {
+      if (autoPlaying) toggleAuto();
+      if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
+      currentMethod = idx;
+      const m = METHODS[idx];
+      // 重置标志位
+      vars = {};
+      m.varDefs.forEach(vd => { vars[vd.key] = vd.init; });
+      prevVars = deepClone(vars);
+      // 重置进程
+      p0 = { step: -1, waiting: false, state: 'idle' };
+      p1 = { step: -1, waiting: false, state: 'idle' };
+      logs = [];
+      logCounter = 0;
+      render();
+      addLog(`切换到方法 ${idx + 1}：${m.fullName}`, 'sys');
+    }
+
+    /* ========== 进程步进 ========== */
+    function advanceProcess(proc) {
+      const m = METHODS[currentMethod];
+      const p = proc === 'p0' ? p0 : p1;
+      const steps = proc === 'p0' ? m.stepsP0 : m.stepsP1;
+
+      prevVars = deepClone(vars);
+
+      if (p.step === -1) {
+        // 从剩余区开始
+        p.step = 0;
+        const s = steps[0];
+        if (s.action) s.action(vars);
+        if (s.wait && s.wait(vars)) {
+          p.waiting = true;
+          addLog(`${proc.toUpperCase()}: ${getWaitDesc(s, proc)} `, proc);
+        } else {
+          p.waiting = false;
+          addLog(`${proc.toUpperCase()}: ${s.desc}`, proc);
+        }
+        p.state = s.state;
+      } else if (p.waiting) {
+        // 正在等待，重新检查
+        const s = steps[p.step];
+        if (s.wait && s.wait(vars)) {
+          addLog(`${proc.toUpperCase()}: 仍在等待...`, proc);
+          render();
+          return;
+        } else {
+          p.waiting = false;
+          addLog(`${proc.toUpperCase()}: 条件满足，继续执行`, proc);
+          // 前进到下一步
+          p.step++;
+          if (p.step >= steps.length) {
+            p.step = -1;
+            p.state = 'idle';
+            addLog(`${proc.toUpperCase()}: 回到剩余区`, proc);
+            render();
+            return;
+          }
+          const ns = steps[p.step];
+          if (ns.action) ns.action(vars);
+          if (ns.wait && ns.wait(vars)) {
+            p.waiting = true;
+            addLog(`${proc.toUpperCase()}: ${getWaitDesc(ns, proc)}`, proc);
+          } else {
+            addLog(`${proc.toUpperCase()}: ${ns.desc}`, proc);
+          }
+          p.state = ns.state;
+        }
+      } else {
+        // 正常前进
+        p.step++;
+        if (p.step >= steps.length) {
+          p.step = -1;
+          p.state = 'idle';
+          addLog(`${proc.toUpperCase()}: 回到剩余区`, proc);
+          render();
+          return;
+        }
+        const s = steps[p.step];
+        if (s.action) s.action(vars);
+        if (s.wait && s.wait(vars)) {
+          p.waiting = true;
+          addLog(`${proc.toUpperCase()}: ${getWaitDesc(s, proc)}`, proc);
+        } else {
+          addLog(`${proc.toUpperCase()}: ${s.desc}`, proc);
+        }
+        p.state = s.state;
+      }
+
+      // 检查互斥违反和死锁
+      checkViolations();
+      render();
+    }
+
+    /* 获取等待描述（替换变量占位符） */
+    function getWaitDesc(step, proc) {
+      let desc = step.waitDesc || '等待中...';
+      // 替换 ${turn} 等占位符
+      desc = desc.replace(/\$\{(\w+)\}/g, (_, key) => vars[key]);
+      return desc;
+    }
+
+    /* 检查互斥违反和死锁 */
+    function checkViolations() {
+      const alertEl = document.getElementById('alertPanel');
+      alertEl.className = 'alert-panel';
+
+      // 两个进程同时在临界区
+      if (p0.state === 'critical' && p1.state === 'critical') {
+        alertEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>互斥违反！</strong> P0 和 P1 同时进入临界区，违反了"忙则等待"原则。';
+        alertEl.classList.add('violation');
+        showToast('互斥违反！两个进程同时进入临界区', 'error');
+        if (autoPlaying) toggleAuto();
+        return;
+      }
+
+      // 两个进程都在等待（可能的死锁）
+      if (p0.waiting && p1.waiting) {
+        // 检查是否真的死锁：两个进程都在等待对方释放，且没有任何进程在临界区
+        const m = METHODS[currentMethod];
+        if (m.id === 3) {
+          // 方法3确实会死锁
+          alertEl.innerHTML = '<i class="fas fa-lock"></i> <strong>死锁！</strong> P0 和 P1 都在等待对方释放 flag，形成死锁。违反了"有限等待"原则。';
+          alertEl.classList.add('deadlock');
+          showToast('死锁！两个进程互相等待', 'error');
+          if (autoPlaying) toggleAuto();
+          return;
+        }
+      }
+
+      // 方法1的特殊问题：空闲让进
+      if (m_id() === 1 && p0.waiting && p1.state === 'idle' && p0.step === 0) {
+        alertEl.innerHTML = '<i class="fas fa-info-circle"></i> <strong>违反空闲让进！</strong> 临界区空闲（P1不在临界区），但P0因为 turn=1 而无法进入。必须等P1先进入才行。';
+        alertEl.classList.add('info');
+        showToast('违反空闲让进原则', 'warn');
+        if (autoPlaying) toggleAuto();
+        return;
+      }
+
+      // Peterson算法正确性
+      if (m_id() === 4) {
+        if (p0.state === 'critical' && p1.waiting) {
+          alertEl.innerHTML = '<i class="fas fa-check-circle"></i> Peterson算法正确工作：P0在临界区，P1等待。互斥得到保证。';
+          alertEl.classList.add('info');
+        } else if (p1.state === 'critical' && p0.waiting) {
+          alertEl.innerHTML = '<i class="fas fa-check-circle"></i> Peterson算法正确工作：P1在临界区，P0等待。互斥得到保证。';
+          alertEl.classList.add('info');
+        }
+      }
+    }
+
+    function m_id() { return METHODS[currentMethod].id; }
+
+    /* ========== 重置 ========== */
+    function resetState() {
+      if (autoPlaying) toggleAuto();
+      if (demoTimer) { clearTimeout(demoTimer); demoTimer = null; }
+      const m = METHODS[currentMethod];
+      vars = {};
+      m.varDefs.forEach(vd => { vars[vd.key] = vd.init; });
+      prevVars = deepClone(vars);
+      p0 = { step: -1, waiting: false, state: 'idle' };
+      p1 = { step: -1, waiting: false, state: 'idle' };
+      document.getElementById('alertPanel').className = 'alert-panel';
+      render();
+      addLog('状态已重置', 'sys');
+    }
+
+    /* ========== 自动运行 ========== */
+    function toggleAuto() {
+      autoPlaying = !autoPlaying;
+      const btn = document.getElementById('autoBtn');
+      if (autoPlaying) {
+        btn.classList.add('active');
+        btn.innerHTML = '<i class="fas fa-pause"></i> 暂停 <span class="key-hint">Space</span>';
+        autoStep();
+      } else {
+        btn.classList.remove('active');
+        btn.innerHTML = '<i class="fas fa-play"></i> 自动 <span class="key-hint">Space</span>';
+        if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+      }
+    }
+
+    function autoStep() {
+      if (!autoPlaying) return;
+      const speed = document.getElementById('speedSlider').value;
+      const interval = 1200 - speed * 100;
+
+      // 简单策略：交替步进，但优先让等待的进程重试
+      let proc;
+      if (p0.waiting && !p1.waiting) {
+        proc = 'p1';
+      } else if (!p0.waiting && p1.waiting) {
+        proc = 'p0';
+      } else {
+        // 交替
+        proc = Math.random() < 0.5 ? 'p0' : 'p1';
+        // 如果一个在idle，优先让idle的开始
+        if (p0.step === -1 && p1.step !== -1) proc = 'p0';
+        if (p1.step === -1 && p0.step !== -1) proc = 'p1';
+      }
+
+      advanceProcess(proc);
+      autoTimer = setTimeout(autoStep, interval);
+    }
+
+    /* ========== 问题演示 ========== */
+    function demoProblem() {
+      if (autoPlaying) toggleAuto();
+      resetState();
+
+      const m = METHODS[currentMethod];
+      const demoSeq = m.demo;
+      let i = 0;
+
+      addLog('开始问题演示...', 'sys');
+
+      function demoStep() {
+        if (i >= demoSeq.length) {
+          addLog('演示结束', 'sys');
+          return;
+        }
+        const proc = demoSeq[i];
+        advanceProcess(proc);
+        i++;
+        const speed = document.getElementById('speedSlider').value;
+        const interval = 1200 - speed * 100;
+        demoTimer = setTimeout(demoStep, interval);
+      }
+
+      demoStep();
+    }
+
+    /* ========== 渲染 ========== */
+    function render() {
+      renderMethodTabs();
+      renderCode('p0');
+      renderCode('p1');
+      renderProcState('p0');
+      renderProcState('p1');
+      renderVars();
+      renderTracks();
+      renderDesc();
+    }
+
+    function renderMethodTabs() {
+      const container = document.getElementById('methodTabs');
+      container.innerHTML = METHODS.map((m, i) => `
+        <button class="method-tab ${i === currentMethod ? 'active' : ''}"
+                onclick="switchMethod(${i})" role="tab"
+                aria-selected="${i === currentMethod}">
+          <span class="tab-key">${i + 1}</span>${m.name}
+        </button>
+      `).join('');
+    }
+
+    function renderCode(proc) {
+      const m = METHODS[currentMethod];
+      const code = proc === 'p0' ? m.codeP0 : m.codeP1;
+      const p = proc === 'p0' ? p0 : p1;
+      const activeClass = proc === 'p0' ? 'active-p0' : 'active-p1';
+      const container = document.getElementById(proc === 'p0' ? 'p0Code' : 'p1Code');
+
+      container.innerHTML = code.map((line, i) => {
+        const isActive = (p.step === i);
+        return `<div class="code-line ${isActive ? activeClass : ''}">
+          <span class="line-num">${i + 1}</span>${line.html}
+        </div>`;
+      }).join('');
+    }
+
+    function renderProcState(proc) {
+      const p = proc === 'p0' ? p0 : p1;
+      const container = document.getElementById(proc === 'p0' ? 'p0State' : 'p1State');
+      const stateText = {
+        idle: '剩余区',
+        entering: p.waiting ? '等待中' : '进入区',
+        critical: '临界区',
+        exiting: '退出区'
+      };
+      const badgeClass = p.waiting ? 'waiting' : p.state;
+      container.innerHTML = `
+        <span style="color:var(--fg2);font-size:11px;">当前状态：</span>
+        <span class="state-badge ${badgeClass}">${stateText[p.state] || '剩余区'}</span>
+      `;
+    }
+
+    function renderVars() {
+      const m = METHODS[currentMethod];
+      const container = document.getElementById('varsGrid');
+
+      container.innerHTML = m.varDefs.map(vd => {
+        const val = vars[vd.key];
+        const prevVal = prevVars[vd.key];
+        const changed = val !== prevVal;
+        let displayVal, valClass;
+        if (vd.type === 'bool') {
+          displayVal = val ? 'true' : 'false';
+          valClass = val ? 'true-val' : 'false-val';
+        } else {
+          displayVal = String(val);
+          valClass = 'num-val';
+        }
+        return `<div class="var-card ${changed ? 'changed' : ''}">
+          <div class="var-name">${vd.name}</div>
+          <div class="var-value ${valClass}">${displayVal}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderTracks() {
+      const container = document.getElementById('tracksContainer');
+      const zones = [
+        { key: 'idle', label: '剩余区', cls: 'zone-idle' },
+        { key: 'entering', label: '进入区', cls: 'zone-enter' },
+        { key: 'critical', label: '临界区', cls: 'zone-critical' },
+        { key: 'exiting', label: '退出区', cls: 'zone-exit' }
+      ];
+
+      function getZoneIndex(state) {
+        return zones.findIndex(z => z.key === state);
+      }
+
+      const p0ZoneIdx = getZoneIndex(p0.state);
+      const p1ZoneIdx = getZoneIndex(p1.state);
+
+      // 临界区高亮
+      const critHasProc = p0.state === 'critical' || p1.state === 'critical';
+
+      function buildTrack(proc, p, zoneIdx) {
+        const color = proc === 'p0' ? 'p0' : 'p1';
+        // 计算小球位置
+        // 4个zone等分，小球位置为对应zone的中心
+        const percent = zoneIdx >= 0 ? (zoneIdx * 25 + 12.5) : 0;
+
+        return `<div class="process-track">
+          <div class="track-label ${color}">${proc.toUpperCase()}</div>
+          <div class="track-zones">
+            ${zones.map((z, i) => `<div class="track-zone ${z.cls} ${z.key === 'critical' && critHasProc ? 'has-process' : ''}">${z.label}</div>`).join('')}
+            ${zoneIdx >= 0 ? `<div class="track-arrow ${color} ${p.waiting ? 'waiting' : ''}" style="left: calc(${percent}% - 11px);">${proc === 'p0' ? '0' : '1'}</div>` : ''}
+          </div>
+        </div>`;
+      }
+
+      container.innerHTML = buildTrack('p0', p0, p0ZoneIdx) + buildTrack('p1', p1, p1ZoneIdx);
+    }
+
+    function renderDesc() {
+      const m = METHODS[currentMethod];
+      const container = document.getElementById('descPanel');
+      container.innerHTML = `
+        <h3><i class="fas fa-book" style="font-size:12px;color:var(--fg2);"></i> ${m.fullName}</h3>
+        <p>${m.desc}</p>
+        <p><span class="problem-tag ${m.tagType}">${m.tagType === 'bad' ? '存在问题' : '正确'}</span> ${m.problem}</p>
+      `;
+    }
+
+    function renderLogs() {
+      const container = document.getElementById('logBody');
+      container.innerHTML = logs.map(l => {
+        const typeCls = l.type === 'sys' ? 'sys-log' : l.type === 'ok' ? 'ok-log' : l.type + '-log';
+        return `<div class="log-entry ${typeCls}">
+          <span class="log-time">#${l.id}</span>
+          <span class="log-msg">${l.msg}</span>
+        </div>`;
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    /* ========== 键盘事件 ========== */
+    document.addEventListener('keydown', (e) => {
+      // 忽略输入框中的按键
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      switch (e.key) {
+        case '1': switchMethod(0); break;
+        case '2': switchMethod(1); break;
+        case '3': switchMethod(2); break;
+        case '4': switchMethod(3); break;
+        case 'a': case 'A': advanceProcess('p0'); break;
+        case 'l': case 'L': advanceProcess('p1'); break;
+        case ' ':
+          e.preventDefault();
+          toggleAuto();
+          break;
+        case 'r': case 'R': resetState(); break;
+        case 'd': case 'D': demoProblem(); break;
+      }
+    });
+
+    /* ========== 初始化 ========== */
+    switchMethod(0);
+  </script>
+</body>
+</html>
